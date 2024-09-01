@@ -1,0 +1,172 @@
+import os
+import subprocess
+import shlex
+import select
+import tempfile
+import toml
+import logging
+import copy
+import click
+import json
+from plyer import notification
+from pathlib import Path
+
+logging.basicConfig(
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger()
+
+
+def execute(cmd, dry_run):
+    logger.info("execute: cmd=%s", cmd)
+    if dry_run:
+        return
+    p = subprocess.Popen(
+        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    poll = select.poll()
+    poll.register(p.stdout, select.POLLIN | select.POLLHUP)
+    poll.register(p.stderr, select.POLLIN | select.POLLHUP)
+    pollc = 2
+    events = poll.poll()
+    while pollc > 0 and len(events) > 0:
+        for event in events:
+            (rfd, event) = event
+            if event & select.POLLIN:
+                if rfd == p.stdout.fileno():
+                    lines = p.stdout.readlines()
+                    for line in lines:
+                        logger.debug("execute: stdout=%s", line)
+                if rfd == p.stderr.fileno():
+                    line = p.stderr.readline()
+                    logger.debug("execute: stderr=%s", line)
+            if event & select.POLLHUP:
+                poll.unregister(rfd)
+                pollc = pollc - 1
+            if pollc > 0:
+                events = poll.poll()
+    p.wait()
+
+
+def migrate_playlist(default, pl, temp_file, dry_run):
+    name = pl.get("name")
+    logger.info(f"migrate_playlist: name={name}")
+    local = Path(default.get("local_playlists")) / name
+    with open(local, "r") as file:
+        data = json.load(file)
+
+    core_path = (
+        data["default_core_path"]
+        .replace(default.get("local_cores_suffix"), default.get("remote_cores_suffix"))
+        .replace(default.get("local_cores"), default.get("remote_cores"))
+    )
+    local_rom_dir = Path(default.get("local_roms")) / pl.get("local_folder")
+    local_rom_dir_alt = Path(default.get("local_roms_alt")) / pl.get("local_folder")
+    assert os.path.isdir(local_rom_dir)
+    assert os.path.isdir(local_rom_dir_alt)
+    remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
+    data["default_core_path"] = core_path
+    data["scan_content_dir"] = str(remote_rom_dir)
+    data["scan_dat_file_path"] = ""
+
+    items = []
+    local_items = data["items"]
+    local_items_len = len(local_items)
+    for idx, item in enumerate(local_items):
+        new_item = copy.copy(item)
+        new_item["core_name"] = "DETECT"
+        new_item["core_path"] = "DETECT"
+        local_path = new_item["path"].split("#")[0]
+        local_name = os.path.basename(local_path)
+        logger.info(
+            f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}"
+        )
+        assert os.path.isfile(local_path)
+        new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
+        new_path = new_path.replace(str(local_rom_dir_alt), str(remote_rom_dir))
+        new_item["path"] = new_path
+        items.append(new_item)
+
+    data["items"] = items
+    doc = json.dumps(data)
+    # logger.debug(json.dumps(data, indent=2))
+    assert str(local_rom_dir) not in doc
+    assert str(local_rom_dir_alt) not in doc
+    temp_file.write(doc.encode("utf-8"))
+    temp_file.flush()
+    temp_file.seek(0)
+
+
+def copy_playlist(default, pl, temp_file, dry_run):
+    name = pl.get("name")
+    logger.info(f"copy_playlist: name={name}")
+    hostname = default.get("hostname")
+    remote = Path(default.get("remote_playlists")) / name
+    cmd = f"ssh {hostname} \"cp -v '{remote}' '{remote}.bak'\""
+    execute(cmd, dry_run)
+    cmd = f'scp "{temp_file.name}" "{hostname}:{remote}"'
+    execute(cmd, dry_run)
+    notify("Copy Playlist", f"Copy {name}")
+
+
+def sync_roms(default, pl, dry_run):
+    name = pl.get("name")
+    logger.info(f"sync_roms: name={name}")
+    hostname = default.get("hostname")
+    local_rom_dir = Path(default.get("local_roms")) / pl.get("local_folder")
+    remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
+    assert os.path.isdir(local_rom_dir)
+    cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
+    cmd = f'rsync -rP "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+    execute(cmd, dry_run)
+    notify("Rsync Roms", f"{name}")
+
+
+def sync_bios(default, dry_run):
+    logger.info("sync_bios:")
+    hostname = default.get("hostname")
+    local_bios = Path(default.get("local_bios"))
+    remote_bios = Path(default.get("remote_bios"))
+    assert os.path.isdir(local_bios)
+    cmd = f'rsync -rP --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
+    execute(cmd, dry_run)
+    notify("Rsync Bios", "")
+
+
+def notify(title, message):
+    notification.notify(
+        title=title,
+        message=message,
+        app_icon=None,
+        timeout=3,
+    )
+
+
+@click.command()
+@click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync all")
+@click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync all")
+@click.option(
+    "--name", "-n", "playlist_name", default=None, help="Only repo backup to backup"
+)
+@click.option("--dry-run", is_flag=True, help="Dry run")
+def main(do_sync, do_sync_bios, playlist_name, dry_run):
+    config = toml.load("config.toml")
+    default = config.get("default")
+    if do_sync or playlist_name:
+        for pl in config.get("playlists", []):
+            if playlist_name and playlist_name != pl.get("name"):
+                logger.info(
+                    "main: Skip %s looking for config %s", pl.get("name"), playlist_name
+                )
+                continue
+            logger.info("main: Process %s", pl.get("name"))
+            with tempfile.NamedTemporaryFile() as temp_file:
+                migrate_playlist(default, pl, temp_file, dry_run)
+                copy_playlist(default, pl, temp_file, dry_run)
+            sync_roms(default, pl, dry_run)
+    if do_sync_bios:
+        sync_bios(default, dry_run)
+
+
+if __name__ == "__main__":
+    main()

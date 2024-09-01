@@ -1,0 +1,134 @@
+[default]
+hostname = "steamdeck"
+local_playlists = "/Users/david/Library/Application Support/RetroArch/playlists"
+local_bios = "/Users/david/Library/Application Support/RetroArch/system"
+local_roms = "/Users/david/Library/CloudStorage/Dropbox/Software/Roms"
+local_roms_alt = "/Users/david/Dropbox/Software/Roms"
+local_cores = "/Users/david/Library/Application Support/RetroArch/cores"
+local_cores_suffix = ".dylib"
+remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
+remote_bios = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/system"
+remote_roms = "/home/deck/Emulation/roms"
+remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
+remote_cores_suffix = ".so"
+
+[[playlists]]
+name = "Atari - 2600.lpl"
+local_folder = "Atari - 2600"
+remote_folder = "atari2600"
+
+
+[[playlists]]
+name = "Atari - 7800.lpl"
+local_folder = "Atari - 7800"
+remote_folder = "atari7800"
+
+[[playlists]]
+name = "Atari - Lynx.lpl"
+local_folder = "Atari - Lynx"
+remote_folder = "atarilynx"
+
+[[playlists]]
+name = "FBNeo - Arcade Games.lpl"
+local_folder = "SNK - Neo Geo"
+remote_folder = "neogeo"
+
+[[playlists]]
+name = "MAME 2003-Plus.lpl"
+local_folder = "MAME 2003-Plus"
+remote_folder = "mame"
+
+[[playlists]]
+name = "Nintendo - Game Boy Advance.lpl"
+local_folder = "Nintendo - Game Boy Advance"
+remote_folder = "gba"
+
+[[playlists]]
+name = "Nintendo - Game Boy Color.lpl"
+local_folder = "Nintendo - Game Boy Color"
+remote_folder = "gbc"
+
+[[playlists]]
+name = "Nintendo - Game Boy.lpl"
+local_folder = "Nintendo - Game Boy"
+remote_folder = "gb"
+
+[[playlists]]
+name = "Nintendo - GameCube.lpl"
+local_folder = "Nintendo - GameCube"
+remote_folder = "gamecube"
+
+[[playlists]]
+name = "Nintendo - Nintendo 64.lpl"
+local_folder = "Nintendo - Nintendo 64"
+remote_folder = "n64"
+
+[[playlists]]
+name = "Nintendo - Nintendo DS.lpl"
+local_folder = "Nintendo - Nintendo DS"
+remote_folder = "nds"
+
+[[playlists]]
+name = "Nintendo - Nintendo Entertainment System.lpl"
+local_folder = "Nintendo - Nintendo Entertainment System"
+remote_folder = "nes"
+
+[[playlists]]
+name = "Nintendo - Super Nintendo Entertainment System.lpl"
+local_folder = "Nintendo - Super Nintendo Entertainment System"
+remote_folder = "snes"
+
+[[playlists]]
+name = "Nintendo - Virtual Boy.lpl"
+local_folder = "Nintendo - VirtualBoy"
+remote_folder = "virtualboy"
+
+[[playlists]]
+name = "PC Engine - TurboGrafx.lpl"
+local_folder = "PC Engine - TurboGrafx"
+remote_folder = "pcengine"
+
+[[playlists]]
+name = "Sega - 32X.lpl"
+local_folder = "Sega - 32X"
+remote_folder = "sega32x"
+
+[[playlists]]
+name = "Sega - Dreamcast.lpl"
+local_folder = "Sega - Dreamcast"
+remote_folder = "dreamcast"
+
+[[playlists]]
+name = "Sega - Game Gear.lpl"
+local_folder = "Sega - Game Gear"
+remote_folder = "gamegear"
+
+[[playlists]]
+name = "Sega - Master System.lpl"
+local_folder = "Sega - Master System"
+remote_folder = "mastersystem"
+
+[[playlists]]
+name = "Sega - Mega Drive.lpl"
+local_folder = "Sega - Mega Drive"
+remote_folder = "megadrive"
+
+[[playlists]]
+name = "Sega - Saturn.lpl"
+local_folder = "Sega - Saturn"
+remote_folder = "saturn"
+
+[[playlists]]
+name = "Sony - PlayStation.lpl"
+local_folder = "Sony - PlayStation"
+remote_folder = "psx"
+
+[[playlists]]
+name = "Sony - PlayStation 2.lpl"
+local_folder = "Sony - PlayStation 2"
+remote_folder = "ps2"
+
+[[playlists]]
+name = "Sony - PlayStation Portable.lpl"
+local_folder = "Sony - PlayStation Portable"
+remote_folder = "psp"
