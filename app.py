@@ -110,15 +110,24 @@ def copy_playlist(default, pl, temp_file, dry_run):
     notify("Copy Playlist", f"Copy {name}")
 
 
-def sync_roms(default, pl, dry_run):
+def sync_roms(default, pl, sync_roms_local, dry_run):
     name = pl.get("name")
     logger.debug(f"sync_roms: name={name}")
     hostname = default.get("hostname")
     local_rom_dir = Path(default.get("local_roms")) / pl.get("local_folder")
-    remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
+    if not sync_roms_local:
+        remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
+    else:
+        remote_rom_dir = Path(sync_roms_local) / pl.get("remote_folder")
+
     assert os.path.isdir(local_rom_dir)
-    cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
-    cmd = f'rsync -rP "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+    if not sync_roms_local:
+        cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
+        cmd = f'rsync -rP "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+    else:
+        cmd = f"mkdir '{remote_rom_dir}'"
+        cmd = f'rsync -rP "{local_rom_dir}/" "{remote_rom_dir}"'
+
     execute(cmd, dry_run)
     notify("Rsync Roms", f"{name}")
 
@@ -149,11 +158,26 @@ def notify(title, message):
 @click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync bios files")
 @click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync roms files")
 @click.option(
+    "--sync-roms-local",
+    "-l",
+    default=None,
+    help="Sync roms files to local path mounted path (Sdcard)",
+)
+@click.option(
     "--name", "-n", "system_name", default=None, help="Process one specific system"
 )
 @click.option("--dry-run", is_flag=True, help="Dry run")
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
-def main(do_all, do_sync, do_sync_bios, do_sync_roms, system_name, dry_run, do_debug):
+def main(
+    do_all,
+    do_sync,
+    do_sync_bios,
+    do_sync_roms,
+    sync_roms_local,
+    system_name,
+    dry_run,
+    do_debug,
+):
     if do_debug:
         logger.setLevel(logging.DEBUG)
 
@@ -163,19 +187,21 @@ def main(do_all, do_sync, do_sync_bios, do_sync_roms, system_name, dry_run, do_d
     config = toml.load("config.toml")
     default = config.get("default")
     if do_sync or do_sync_roms or system_name:
-        for pl in config.get("playlists", []):
-            if system_name and system_name != pl.get("name"):
+        for playlist in config.get("playlists", []):
+            if system_name and system_name != playlist.get("name"):
                 logger.info(
-                    "main: Skip %s looking for config %s", pl.get("name"), system_name
+                    "main: Skip %s looking for config %s",
+                    playlist.get("name"),
+                    system_name,
                 )
                 continue
-            logger.info("main: Process %s", pl.get("name"))
+            logger.info("main: Process %s", playlist.get("name"))
             if do_sync:
                 with tempfile.NamedTemporaryFile() as temp_file:
-                    migrate_playlist(default, pl, temp_file, dry_run)
-                    copy_playlist(default, pl, temp_file, dry_run)
+                    migrate_playlist(default, playlist, temp_file, dry_run)
+                    copy_playlist(default, playlist, temp_file, dry_run)
             if do_sync_roms:
-                sync_roms(default, pl, dry_run)
+                sync_roms(default, playlist, sync_roms_local, dry_run)
     if do_sync_bios:
         sync_bios(default, dry_run)
 
