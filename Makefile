@@ -1,13 +1,16 @@
-env-boostrap:
-	rm -rvf .venv
-	uv venv
+homebrew:
+	brew install uv
+	brew install direnv
 
-pip-install:
+bootstrap:
+	test -d .venv && rm -rvf .venv
+	uv venv
+	direnv reload
+
+pip:
 	uv pip install -r requirements.txt
 
+install: homebrew bootstrap pip
 
-all: env-boostrap pip-install
-
-sync:
-	python3 app.py
-
+run:
+	uv run app.py --all --dry-run

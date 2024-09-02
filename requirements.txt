@@ -1,3 +1,5 @@
 toml
 retrying
 click
+pyobjus
+plyer
