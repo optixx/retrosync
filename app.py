@@ -144,20 +144,25 @@ def notify(title, message):
 
 
 @click.command()
-@click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync all")
-@click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync all")
+@click.option("--all", "-a", "do_all", is_flag=True, help="Sync all")
+@click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync playlist")
+@click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync bios files")
+@click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync roms files")
 @click.option(
     "--name", "-n", "system_name", default=None, help="Process one specific system"
 )
 @click.option("--dry-run", is_flag=True, help="Dry run")
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
-def main(do_sync, do_sync_bios, system_name, dry_run, do_debug):
+def main(do_all, do_sync, do_sync_bios, do_sync_roms, system_name, dry_run, do_debug):
     if do_debug:
         logger.setLevel(logging.DEBUG)
 
+    if do_all:
+        do_sync = do_sync_roms = do_sync_bios = True
+
     config = toml.load("config.toml")
     default = config.get("default")
-    if do_sync or system_name:
+    if do_sync or do_sync_roms or system_name:
         for pl in config.get("playlists", []):
             if system_name and system_name != pl.get("name"):
                 logger.info(
@@ -165,10 +170,12 @@ def main(do_sync, do_sync_bios, system_name, dry_run, do_debug):
                 )
                 continue
             logger.info("main: Process %s", pl.get("name"))
-            with tempfile.NamedTemporaryFile() as temp_file:
-                migrate_playlist(default, pl, temp_file, dry_run)
-                copy_playlist(default, pl, temp_file, dry_run)
-            sync_roms(default, pl, dry_run)
+            if do_sync:
+                with tempfile.NamedTemporaryFile() as temp_file:
+                    migrate_playlist(default, pl, temp_file, dry_run)
+                    copy_playlist(default, pl, temp_file, dry_run)
+            if do_sync_roms:
+                sync_roms(default, pl, dry_run)
     if do_sync_bios:
         sync_bios(default, dry_run)
 
