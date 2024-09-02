@@ -9,6 +9,7 @@ import logging
 import copy
 import click
 import json
+import Levenshtein as lev
 from plyer import notification
 from pathlib import Path
 
@@ -155,6 +156,29 @@ def notify(title, message):
     )
 
 
+def match_system(system_name, playlists):
+    if system_name:
+        dt1 = 1_000
+        dt1_name = None
+        dt2 = 1_000
+        dt2_name = None
+        for playlist in playlists:
+            n1 = playlist.get("name")
+            n2 = playlist.get("remote_folder")
+            d1 = lev.distance(n1, system_name, weights=(1, 1, 2))
+            d2 = lev.distance(n2, system_name, weights=(1, 1, 2))
+            if d1 < dt1:
+                dt1 = d1
+                dt1_name = n1
+            if d2 < dt2:
+                dt2 = d2
+                dt2_name = n1
+        if dt1 < dt2:
+            return dt1_name
+        else:
+            return dt2_name
+
+
 @click.command()
 @click.option("--all", "-a", "do_all", is_flag=True, help="Sync all")
 @click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync playlist")
@@ -169,7 +193,7 @@ def notify(title, message):
 @click.option(
     "--name", "-n", "system_name", default=None, help="Process one specific system"
 )
-@click.option("--dry-run", is_flag=True, help="Dry run")
+@click.option("--dry-run", "-D", is_flag=True, help="Dry run")
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
 def main(
     do_all,
@@ -189,6 +213,14 @@ def main(
 
     config = toml.load("config.toml")
     default = config.get("default")
+    playlists = config.get("playlists", [])
+    if system_name:
+        system_name = match_system(system_name, playlists)
+        if not click.confirm(
+            f"Do you want to continue with playlists '{system_name}' ?"
+        ):
+            sys.exit(-1)
+
     if do_sync or do_sync_roms or system_name:
         for playlist in config.get("playlists", []):
             if system_name and system_name != playlist.get("name"):
