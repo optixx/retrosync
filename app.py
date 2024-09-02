@@ -123,12 +123,15 @@ def sync_roms(default, pl, sync_roms_local, dry_run):
     assert os.path.isdir(local_rom_dir)
     if not sync_roms_local:
         cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
-        cmd = f'rsync -rP "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+        execute(cmd, dry_run)
+        cmd = f'rsync --recursive --progress --verbose --human-readable --delete --dry-run --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+        execute(cmd, dry_run)
     else:
         cmd = f"mkdir '{remote_rom_dir}'"
-        cmd = f'rsync -rP "{local_rom_dir}/" "{remote_rom_dir}"'
+        execute(cmd, dry_run)
+        cmd = f'rsync --recursive --progress --verbose --human-readable --delete --dry-run --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{remote_rom_dir}"'
+        execute(cmd, dry_run)
 
-    execute(cmd, dry_run)
     notify("Rsync Roms", f"{name}")
 
 
@@ -138,7 +141,7 @@ def sync_bios(default, dry_run):
     local_bios = Path(default.get("local_bios"))
     remote_bios = Path(default.get("remote_bios"))
     assert os.path.isdir(local_bios)
-    cmd = f'rsync -rP --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
+    cmd = f'rsync --recursive --progress --verbose --human-readable --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
     notify("Rsync Bios", "")
 
