@@ -3,6 +3,7 @@ import subprocess
 import shlex
 import select
 import tempfile
+from plyer.utils import sys
 import toml
 import logging
 import copy
@@ -12,13 +13,13 @@ from plyer import notification
 from pathlib import Path
 
 logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger()
 
 
 def execute(cmd, dry_run):
-    logger.info("execute: cmd=%s", cmd)
+    logger.debug("execute: cmd=%s", cmd)
     if dry_run:
         return
     p = subprocess.Popen(
@@ -50,7 +51,7 @@ def execute(cmd, dry_run):
 
 def migrate_playlist(default, pl, temp_file, dry_run):
     name = pl.get("name")
-    logger.info(f"migrate_playlist: name={name}")
+    logger.debug(f"migrate_playlist: name={name}")
     local = Path(default.get("local_playlists")) / name
     with open(local, "r") as file:
         data = json.load(file)
@@ -78,7 +79,7 @@ def migrate_playlist(default, pl, temp_file, dry_run):
         new_item["core_path"] = "DETECT"
         local_path = new_item["path"].split("#")[0]
         local_name = os.path.basename(local_path)
-        logger.info(
+        logger.debug(
             f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}"
         )
         assert os.path.isfile(local_path)
@@ -89,7 +90,7 @@ def migrate_playlist(default, pl, temp_file, dry_run):
 
     data["items"] = items
     doc = json.dumps(data)
-    # logger.debug(json.dumps(data, indent=2))
+    logger.debug(json.dumps(data, indent=2))
     assert str(local_rom_dir) not in doc
     assert str(local_rom_dir_alt) not in doc
     temp_file.write(doc.encode("utf-8"))
@@ -99,7 +100,7 @@ def migrate_playlist(default, pl, temp_file, dry_run):
 
 def copy_playlist(default, pl, temp_file, dry_run):
     name = pl.get("name")
-    logger.info(f"copy_playlist: name={name}")
+    logger.debug("copy_playlist: name={name}")
     hostname = default.get("hostname")
     remote = Path(default.get("remote_playlists")) / name
     cmd = f"ssh {hostname} \"cp -v '{remote}' '{remote}.bak'\""
@@ -111,7 +112,7 @@ def copy_playlist(default, pl, temp_file, dry_run):
 
 def sync_roms(default, pl, dry_run):
     name = pl.get("name")
-    logger.info(f"sync_roms: name={name}")
+    logger.debug(f"sync_roms: name={name}")
     hostname = default.get("hostname")
     local_rom_dir = Path(default.get("local_roms")) / pl.get("local_folder")
     remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
@@ -146,17 +147,21 @@ def notify(title, message):
 @click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync all")
 @click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync all")
 @click.option(
-    "--name", "-n", "playlist_name", default=None, help="Only repo backup to backup"
+    "--name", "-n", "system_name", default=None, help="Process one specific system"
 )
 @click.option("--dry-run", is_flag=True, help="Dry run")
-def main(do_sync, do_sync_bios, playlist_name, dry_run):
+@click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
+def main(do_sync, do_sync_bios, system_name, dry_run, do_debug):
+    if do_debug:
+        logger.setLevel(logging.DEBUG)
+
     config = toml.load("config.toml")
     default = config.get("default")
-    if do_sync or playlist_name:
+    if do_sync or system_name:
         for pl in config.get("playlists", []):
-            if playlist_name and playlist_name != pl.get("name"):
+            if system_name and system_name != pl.get("name"):
                 logger.info(
-                    "main: Skip %s looking for config %s", pl.get("name"), playlist_name
+                    "main: Skip %s looking for config %s", pl.get("name"), system_name
                 )
                 continue
             logger.info("main: Process %s", pl.get("name"))

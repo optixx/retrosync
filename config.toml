@@ -1,11 +1,13 @@
 [default]
 hostname = "steamdeck"
+
 local_playlists = "/Users/david/Library/Application Support/RetroArch/playlists"
 local_bios = "/Users/david/Library/Application Support/RetroArch/system"
-local_roms = "/Users/david/Library/CloudStorage/Dropbox/Software/Roms"
-local_roms_alt = "/Users/david/Dropbox/Software/Roms"
+local_roms = "/Users/david/Dropbox/Software/Roms"
+local_roms_alt= "/Users/david/Library/CloudStorage/Dropbox/Software/Roms"
 local_cores = "/Users/david/Library/Application Support/RetroArch/cores"
 local_cores_suffix = ".dylib"
+
 remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
 remote_bios = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/system"
 remote_roms = "/home/deck/Emulation/roms"
@@ -27,6 +29,11 @@ remote_folder = "atari7800"
 name = "Atari - Lynx.lpl"
 local_folder = "Atari - Lynx"
 remote_folder = "atarilynx"
+
+[[playlists]]
+name = "Atari - Jaguar.lpl"
+local_folder = "Atari - Jaguar"
+remote_folder = "atarijaguar"
 
 [[playlists]]
 name = "FBNeo - Arcade Games.lpl"
