@@ -10,7 +10,7 @@ local_cores_suffix = ".dylib"
 
 remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
 remote_bios = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/system"
-remote_roms = "/home/deck/Emulation/roms"
+remote_roms = "/run/media/deck/3c1e973e-2ca0-47e5-a8ce-fbb93725a0ea/roms"
 remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 remote_cores_suffix = ".so"
 

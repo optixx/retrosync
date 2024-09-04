@@ -24,7 +24,7 @@ def execute(cmd, dry_run):
     if dry_run:
         return
     p = subprocess.Popen(
-        shlex.split(cmd), stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
     )
     poll = select.poll()
     poll.register(p.stdout, select.POLLIN | select.POLLHUP)
@@ -125,12 +125,12 @@ def sync_roms(default, pl, sync_roms_local, dry_run):
     if not sync_roms_local:
         cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
         execute(cmd, dry_run)
-        cmd = f'rsync --recursive --progress --verbose --human-readable --delete --dry-run --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+        cmd = f'rsync --outbuf=L --recursive --progress --verbose --human-readable --size-only --ignore-times --delete --dry-run --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
         execute(cmd, dry_run)
     else:
         cmd = f"mkdir '{remote_rom_dir}'"
         execute(cmd, dry_run)
-        cmd = f'rsync --recursive --progress --verbose --human-readable --delete --dry-run --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{remote_rom_dir}"'
+        cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable --size-only --ignore-times --delete --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{remote_rom_dir}"'
         execute(cmd, dry_run)
 
     notify("Rsync Roms", f"{name}")
@@ -142,7 +142,7 @@ def sync_bios(default, dry_run):
     local_bios = Path(default.get("local_bios"))
     remote_bios = Path(default.get("remote_bios"))
     assert os.path.isdir(local_bios)
-    cmd = f'rsync --recursive --progress --verbose --human-readable --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
+    cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
     notify("Rsync Bios", "")
 
@@ -180,7 +180,7 @@ def match_system(system_name, playlists):
 
 
 @click.command()
-@click.option("--all", "-a", "do_all", is_flag=True, help="Sync all")
+@click.option("--all", "-a", "do_all", is_flag=True, help="Sync all file")
 @click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync playlist")
 @click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync bios files")
 @click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync roms files")
@@ -191,7 +191,7 @@ def match_system(system_name, playlists):
     help="Sync roms files to local path mounted path (Sdcard)",
 )
 @click.option(
-    "--name", "-n", "system_name", default=None, help="Process one specific system"
+    "--name", "-n", "system_name", default=None, help="Process only one specific system"
 )
 @click.option("--dry-run", "-D", is_flag=True, help="Dry run")
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
@@ -221,6 +221,9 @@ def main(
         ):
             sys.exit(-1)
 
+    if do_sync_bios:
+        sync_bios(default, dry_run)
+
     if do_sync or do_sync_roms or system_name:
         for playlist in config.get("playlists", []):
             if system_name and system_name != playlist.get("name"):
@@ -230,6 +233,7 @@ def main(
                     system_name,
                 )
                 continue
+
             logger.info("main: Process %s", playlist.get("name"))
             if do_sync:
                 with tempfile.NamedTemporaryFile() as temp_file:
@@ -237,8 +241,6 @@ def main(
                     copy_playlist(default, playlist, temp_file, dry_run)
             if do_sync_roms:
                 sync_roms(default, playlist, sync_roms_local, dry_run)
-    if do_sync_bios:
-        sync_bios(default, dry_run)
 
 
 if __name__ == "__main__":
