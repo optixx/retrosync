@@ -9,8 +9,8 @@ local_cores = "/Users/david/Library/Application Support/RetroArch/cores"
 local_cores_suffix = ".dylib"
 
 remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
-remote_bios = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/system"
-remote_roms = "/run/media/deck/3c1e973e-2ca0-47e5-a8ce-fbb93725a0ea/roms"
+remote_bios = "/home/deck/Emulation/bios"
+remote_roms = "/run/media/deck/Steamdeck/roms"
 remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 remote_cores_suffix = ".so"
 
@@ -91,6 +91,11 @@ local_folder = "Nintendo - VirtualBoy"
 remote_folder = "virtualboy"
 
 [[playlists]]
+name = "Nintendo - Wii.lpl"
+local_folder = "Nintendo - Wii"
+remote_folder = "wii"
+
+[[playlists]]
 name = "PC Engine - TurboGrafx.lpl"
 local_folder = "PC Engine - TurboGrafx"
 remote_folder = "pcengine"
@@ -139,3 +144,13 @@ remote_folder = "ps2"
 name = "Sony - PlayStation Portable.lpl"
 local_folder = "Sony - PlayStation Portable"
 remote_folder = "psp"
+
+[[playlists]]
+name = "DOOM.lpl"
+local_folder = "ID - Doom"
+remote_folder = "doom"
+
+[[playlists]]
+name = "Cannonball.lpl"
+local_folder = "Cannonball"
+remote_folder = "cannonball"

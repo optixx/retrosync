@@ -125,7 +125,7 @@ def sync_roms(default, pl, sync_roms_local, dry_run):
     if not sync_roms_local:
         cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
         execute(cmd, dry_run)
-        cmd = f'rsync --outbuf=L --recursive --progress --verbose --human-readable --size-only --ignore-times --delete --dry-run --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
+        cmd = f'rsync --outbuf=L --recursive --progress --verbose --human-readable --size-only --ignore-times --delete --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
         execute(cmd, dry_run)
     else:
         cmd = f"mkdir '{remote_rom_dir}'"
