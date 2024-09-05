@@ -1,7 +1,5 @@
-import enum
 import os
 import subprocess
-import shlex
 import select
 import tempfile
 from plyer.utils import sys
@@ -28,6 +26,38 @@ item_tpl = {
     "crc32": "00000000|crc",
     "db_name": "",
 }
+
+
+def notify(title, message):
+    notification.notify(
+        title=title,
+        message=message,
+        app_icon=None,
+        timeout=3,
+    )
+
+
+def match_system(system_name, playlists):
+    if system_name:
+        dt1 = 1_000
+        dt1_name = None
+        dt2 = 1_000
+        dt2_name = None
+        for playlist in playlists:
+            n1 = playlist.get("name")
+            n2 = playlist.get("remote_folder")
+            d1 = lev.distance(n1, system_name, weights=(1, 1, 2))
+            d2 = lev.distance(n2, system_name, weights=(1, 1, 2))
+            if d1 < dt1:
+                dt1 = d1
+                dt1_name = n1
+            if d2 < dt2:
+                dt2 = d2
+                dt2_name = n1
+        if dt1 < dt2:
+            return dt1_name
+        else:
+            return dt2_name
 
 
 def execute(cmd, dry_run):
@@ -65,8 +95,8 @@ def backup_file(file_path):
     original_file = Path(file_path)
     backup_file = original_file.with_suffix(original_file.suffix + ".backup")
     backup_file.write_bytes(original_file.read_bytes())
-
-    print(f"Backup created at: {backup_file}")
+    logger.debug(f"backup_file: created {backup_file}")
+    return str(backup_file)
 
 
 def update_playlist(default, pl, dry_run):
@@ -212,38 +242,6 @@ def sync_thumbnails(default, dry_run):
     cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --delete "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
     notify("Rsync thumbnails", "")
-
-
-def notify(title, message):
-    notification.notify(
-        title=title,
-        message=message,
-        app_icon=None,
-        timeout=3,
-    )
-
-
-def match_system(system_name, playlists):
-    if system_name:
-        dt1 = 1_000
-        dt1_name = None
-        dt2 = 1_000
-        dt2_name = None
-        for playlist in playlists:
-            n1 = playlist.get("name")
-            n2 = playlist.get("remote_folder")
-            d1 = lev.distance(n1, system_name, weights=(1, 1, 2))
-            d2 = lev.distance(n2, system_name, weights=(1, 1, 2))
-            if d1 < dt1:
-                dt1 = d1
-                dt1_name = n1
-            if d2 < dt2:
-                dt2 = d2
-                dt2_name = n1
-        if dt1 < dt2:
-            return dt1_name
-        else:
-            return dt2_name
 
 
 @click.command()
