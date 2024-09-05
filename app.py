@@ -1,3 +1,4 @@
+import enum
 import os
 import subprocess
 import shlex
@@ -9,6 +10,7 @@ import logging
 import copy
 import click
 import json
+import glob
 import Levenshtein as lev
 from plyer import notification
 from pathlib import Path
@@ -17,6 +19,15 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger()
+
+item_tpl = {
+    "path": "",
+    "label": "",
+    "core_path": "DETECT",
+    "core_name": "DETECT",
+    "crc32": "00000000|crc",
+    "db_name": "",
+}
 
 
 def execute(cmd, dry_run):
@@ -48,6 +59,51 @@ def execute(cmd, dry_run):
             if pollc > 0:
                 events = poll.poll()
     p.wait()
+
+
+def backup_file(file_path):
+    original_file = Path(file_path)
+    backup_file = original_file.with_suffix(original_file.suffix + ".backup")
+    backup_file.write_bytes(original_file.read_bytes())
+
+    print(f"Backup created at: {backup_file}")
+
+
+def update_playlist(default, pl, dry_run):
+    name = pl.get("name")
+    logger.debug(f"migrate_playlist: name={name}")
+    local = Path(default.get("local_playlists")) / name
+    if not dry_run:
+        backup_file(local)
+
+    with open(local, "r") as file:
+        data = json.load(file)
+
+    local_rom_dir = Path(default.get("local_roms_alt")) / pl.get("local_folder")
+    assert os.path.isdir(local_rom_dir)
+    items = []
+    files = glob.glob(str(local_rom_dir / "*"))
+    files.sort()
+    files_len = len(files)
+    for idx, file in enumerate(files):
+        if Path(file).is_dir():
+            subs = glob.glob(str(Path(file) / "*.cue"))
+            if len(subs) == 1:
+                file = subs.pop()
+
+        new_item = copy.copy(item_tpl)
+        new_item["path"] = file
+        new_item["label"] = str(Path(file).stem)
+        new_item["db_name"] = local.name
+        logger.debug(f"update_playlist: Update [{idx+1}/{files_len}] path={file}")
+        items.append(new_item)
+
+    data["items"] = items
+    doc = json.dumps(data, indent=2)
+    logger.debug(json.dumps(data, indent=2))
+    if not dry_run:
+        with open(str(local), "w") as new_file:
+            new_file.write(doc)
 
 
 def migrate_playlist(default, pl, temp_file, dry_run):
@@ -147,6 +203,17 @@ def sync_bios(default, dry_run):
     notify("Rsync Bios", "")
 
 
+def sync_thumbnails(default, dry_run):
+    logger.info("sync_thumbnails:")
+    hostname = default.get("hostname")
+    local_bios = Path(default.get("local_thumbnails"))
+    remote_bios = Path(default.get("remote_thumbnails"))
+    assert os.path.isdir(local_bios)
+    cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --delete "{local_bios}/" "{hostname}:{remote_bios}"'
+    execute(cmd, dry_run)
+    notify("Rsync thumbnails", "")
+
+
 def notify(title, message):
     notification.notify(
         title=title,
@@ -181,9 +248,25 @@ def match_system(system_name, playlists):
 
 @click.command()
 @click.option("--all", "-a", "do_all", is_flag=True, help="Sync all file")
-@click.option("--sync", "-s", "do_sync", is_flag=True, help="Sync playlist")
+@click.option(
+    "--sync-playlists", "-p", "do_sync_playlists", is_flag=True, help="Sync playlist"
+)
 @click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync bios files")
+@click.option(
+    "--sync-thumbnails",
+    "-t",
+    "do_sync_thumbails",
+    is_flag=True,
+    help="Sync thumbnails files",
+)
 @click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync roms files")
+@click.option(
+    "--update-playlists",
+    "-u",
+    "do_update_playlists",
+    is_flag=True,
+    help="Update local playlist",
+)
 @click.option(
     "--sync-roms-local",
     "-l",
@@ -197,9 +280,11 @@ def match_system(system_name, playlists):
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
 def main(
     do_all,
-    do_sync,
+    do_sync_playlists,
     do_sync_bios,
+    do_sync_thumbails,
     do_sync_roms,
+    do_update_playlists,
     sync_roms_local,
     system_name,
     dry_run,
@@ -209,7 +294,7 @@ def main(
         logger.setLevel(logging.DEBUG)
 
     if do_all:
-        do_sync = do_sync_roms = do_sync_bios = True
+        do_sync_playlists = do_sync_roms = do_sync_bios = True
 
     config = toml.load("config.toml")
     default = config.get("default")
@@ -224,10 +309,13 @@ def main(
     if do_sync_bios:
         sync_bios(default, dry_run)
 
-    if do_sync or do_sync_roms or system_name:
+    if do_sync_thumbails:
+        sync_thumbnails(default, dry_run)
+
+    if do_sync_playlists or do_sync_roms or system_name:
         for playlist in config.get("playlists", []):
             if system_name and system_name != playlist.get("name"):
-                logger.info(
+                logger.debug(
                     "main: Skip %s looking for config %s",
                     playlist.get("name"),
                     system_name,
@@ -235,10 +323,15 @@ def main(
                 continue
 
             logger.info("main: Process %s", playlist.get("name"))
-            if do_sync:
+
+            if do_update_playlists:
+                update_playlist(default, playlist, dry_run)
+
+            if do_sync_playlists:
                 with tempfile.NamedTemporaryFile() as temp_file:
                     migrate_playlist(default, playlist, temp_file, dry_run)
                     copy_playlist(default, playlist, temp_file, dry_run)
+
             if do_sync_roms:
                 sync_roms(default, playlist, sync_roms_local, dry_run)
 

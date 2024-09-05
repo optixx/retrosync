@@ -6,12 +6,14 @@ local_bios = "/Users/david/Library/Application Support/RetroArch/system"
 local_roms = "/Users/david/Dropbox/Software/Roms"
 local_roms_alt= "/Users/david/Library/CloudStorage/Dropbox/Software/Roms"
 local_cores = "/Users/david/Library/Application Support/RetroArch/cores"
+local_thumbnails = "/Users/david/Library/Application Support/RetroArch/thumbnails"
 local_cores_suffix = ".dylib"
 
 remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
 remote_bios = "/home/deck/Emulation/bios"
 remote_roms = "/run/media/deck/Steamdeck/roms"
 remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
+remote_thumbnails = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/thumbnails"
 remote_cores_suffix = ".so"
 
 [[playlists]]
