@@ -27,6 +27,7 @@ item_tpl = {
     "crc32": "00000000|crc",
     "db_name": "",
 }
+metadata_suffixes = [".cue", ".m3u"]
 
 
 def notify(title, message):
@@ -100,6 +101,25 @@ def backup_file(file_path):
     return str(backup_file)
 
 
+def find_metadata(local_rom_dir):
+    files = glob.glob(str(local_rom_dir / "*"))
+    files.sort()
+    suffixes = defaultdict(int)
+    names = defaultdict(int)
+    for file in files:
+        suffixes[Path(file).suffix] += 1
+        names[Path(file).stem] += 1
+
+    # Are there any metadata files
+    # And do we have multiple files with the same stem?
+    if (
+        set(metadata_suffixes).issubset(suffixes.keys())
+        and max(list(set(names.values()))) >= 2
+    ):
+        return True
+    return False
+
+
 def update_playlist(default, playlist, dry_run):
     name = playlist.get("name")
     logger.debug(f"migrate_playlist: name={name}")
@@ -112,27 +132,11 @@ def update_playlist(default, playlist, dry_run):
 
     local_rom_dir = Path(default.get("local_roms_alt")) / playlist.get("local_folder")
     assert os.path.isdir(local_rom_dir)
+    prefer_metadata_files = find_metadata(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
     files.sort()
     files_len = len(files)
-    suffixes = defaultdict(int)
-    names = defaultdict(int)
-    for idx, file in enumerate(files):
-        suffixes[Path(file).suffix] += 1
-        names[Path(file).stem] += 1
-
-    # Are there any metadata files
-    # And do we have multiple files with the same stem?
-    metadata_suffixes = [".cue", ".m3u"]
-    if (
-        set(metadata_suffixes).issubset(suffixes.keys())
-        and max(list(set(names.values()))) >= 2
-    ):
-        prefer_metadata_files = True
-    else:
-        prefer_metadata_files = False
-
     for idx, file in enumerate(files):
         if Path(file).is_dir():
             subs = glob.glob(str(Path(file) / "*.cue"))
