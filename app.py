@@ -12,6 +12,7 @@ import glob
 import Levenshtein as lev
 from plyer import notification
 from pathlib import Path
+from collections import defaultdict
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -99,8 +100,8 @@ def backup_file(file_path):
     return str(backup_file)
 
 
-def update_playlist(default, pl, dry_run):
-    name = pl.get("name")
+def update_playlist(default, playlist, dry_run):
+    name = playlist.get("name")
     logger.debug(f"migrate_playlist: name={name}")
     local = Path(default.get("local_playlists")) / name
     if not dry_run:
@@ -109,17 +110,38 @@ def update_playlist(default, pl, dry_run):
     with open(local, "r") as file:
         data = json.load(file)
 
-    local_rom_dir = Path(default.get("local_roms_alt")) / pl.get("local_folder")
+    local_rom_dir = Path(default.get("local_roms_alt")) / playlist.get("local_folder")
     assert os.path.isdir(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
     files.sort()
     files_len = len(files)
+    suffixes = defaultdict(int)
+    names = defaultdict(int)
+    for idx, file in enumerate(files):
+        suffixes[Path(file).suffix] += 1
+        names[Path(file).stem] += 1
+
+    # Are there any metadata files
+    # And do we have multiple files with the same stem?
+    metadata_suffixes = [".cue", ".m3u"]
+    if (
+        set(metadata_suffixes).issubset(suffixes.keys())
+        and max(list(set(names.values()))) >= 2
+    ):
+        prefer_metadata_files = True
+    else:
+        prefer_metadata_files = False
+
     for idx, file in enumerate(files):
         if Path(file).is_dir():
             subs = glob.glob(str(Path(file) / "*.cue"))
             if len(subs) == 1:
                 file = subs.pop()
+
+        if prefer_metadata_files:
+            if Path(file).suffix not in metadata_suffixes:
+                continue
 
         new_item = copy.copy(item_tpl)
         new_item["path"] = file
@@ -136,8 +158,8 @@ def update_playlist(default, pl, dry_run):
             new_file.write(doc)
 
 
-def migrate_playlist(default, pl, temp_file, dry_run):
-    name = pl.get("name")
+def migrate_playlist(default, playlist, temp_file, dry_run):
+    name = playlist.get("name")
     logger.debug(f"migrate_playlist: name={name}")
     local = Path(default.get("local_playlists")) / name
     with open(local, "r") as file:
@@ -148,11 +170,13 @@ def migrate_playlist(default, pl, temp_file, dry_run):
         .replace(default.get("local_cores_suffix"), default.get("remote_cores_suffix"))
         .replace(default.get("local_cores"), default.get("remote_cores"))
     )
-    local_rom_dir = Path(default.get("local_roms")) / pl.get("local_folder")
-    local_rom_dir_alt = Path(default.get("local_roms_alt")) / pl.get("local_folder")
+    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
+    local_rom_dir_alt = Path(default.get("local_roms_alt")) / playlist.get(
+        "local_folder"
+    )
     assert os.path.isdir(local_rom_dir)
     assert os.path.isdir(local_rom_dir_alt)
-    remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
+    remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
     data["default_core_path"] = core_path
     data["scan_content_dir"] = str(remote_rom_dir)
     data["scan_dat_file_path"] = ""
@@ -185,8 +209,8 @@ def migrate_playlist(default, pl, temp_file, dry_run):
     temp_file.seek(0)
 
 
-def copy_playlist(default, pl, temp_file, dry_run):
-    name = pl.get("name")
+def copy_playlist(default, playlist, temp_file, dry_run):
+    name = playlist.get("name")
     logger.debug("copy_playlist: name={name}")
     hostname = default.get("hostname")
     remote = Path(default.get("remote_playlists")) / name
@@ -197,15 +221,17 @@ def copy_playlist(default, pl, temp_file, dry_run):
     notify("Copy Playlist", f"Copy {name}")
 
 
-def sync_roms(default, pl, sync_roms_local, dry_run):
-    name = pl.get("name")
+def sync_roms(default, playlist, sync_roms_local, dry_run):
+    name = playlist.get("name")
     logger.debug(f"sync_roms: name={name}")
     hostname = default.get("hostname")
-    local_rom_dir = Path(default.get("local_roms")) / pl.get("local_folder")
+    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
     if not sync_roms_local:
-        remote_rom_dir = Path(default.get("remote_roms")) / pl.get("remote_folder")
+        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get(
+            "remote_folder"
+        )
     else:
-        remote_rom_dir = Path(sync_roms_local) / pl.get("remote_folder")
+        remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
 
     assert os.path.isdir(local_rom_dir)
     if not sync_roms_local:
@@ -276,6 +302,7 @@ def sync_thumbnails(default, dry_run):
 )
 @click.option("--dry-run", "-D", is_flag=True, help="Dry run")
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
+@click.option("--yes", is_flag=True)
 def main(
     do_all,
     do_sync_playlists,
@@ -287,6 +314,7 @@ def main(
     system_name,
     dry_run,
     do_debug,
+    yes,
 ):
     if do_debug:
         logger.setLevel(logging.DEBUG)
@@ -299,10 +327,11 @@ def main(
     playlists = config.get("playlists", [])
     if system_name:
         system_name = match_system(system_name, playlists)
-        if not click.confirm(
-            f"Do you want to continue with playlists '{system_name}' ?"
-        ):
-            sys.exit(-1)
+        if not yes:
+            if not click.confirm(
+                f"Do you want to continue with playlists '{system_name}' ?"
+            ):
+                sys.exit(-1)
 
     if do_sync_bios:
         sync_bios(default, dry_run)

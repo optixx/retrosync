@@ -4,3 +4,4 @@ click
 pyobjus
 plyer
 Levenshtein
+lxml
