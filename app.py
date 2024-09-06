@@ -13,6 +13,7 @@ import Levenshtein as lev
 from plyer import notification
 from pathlib import Path
 from collections import defaultdict
+from lxml import etree
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -101,6 +102,21 @@ def backup_file(file_path):
     return str(backup_file)
 
 
+def find_dat(local_rom_dir):
+    name_map = {}
+    files = glob.glob(str(local_rom_dir / "*.dat"))
+    files.sort()
+    if not len(files) == 1:
+        return name_map
+    dat_file = files.pop()
+    with open(dat_file, "r") as fd:
+        data = fd.read()
+    root = etree.fromstring(data)
+    for game in root.xpath("//game"):
+        name_map[game.attrib["name"]] = game.findtext("description")
+    return name_map
+
+
 def find_metadata(local_rom_dir):
     files = glob.glob(str(local_rom_dir / "*"))
     files.sort()
@@ -133,6 +149,7 @@ def update_playlist(default, playlist, dry_run):
     local_rom_dir = Path(default.get("local_roms_alt")) / playlist.get("local_folder")
     assert os.path.isdir(local_rom_dir)
     prefer_metadata_files = find_metadata(local_rom_dir)
+    name_map = find_dat(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
     files.sort()
@@ -147,9 +164,10 @@ def update_playlist(default, playlist, dry_run):
             if Path(file).suffix not in metadata_suffixes:
                 continue
 
+        stem = str(Path(file).stem)
         new_item = copy.copy(item_tpl)
         new_item["path"] = file
-        new_item["label"] = str(Path(file).stem)
+        new_item["label"] = name_map.get(stem, stem)
         new_item["db_name"] = local.name
         logger.debug(f"update_playlist: Update [{idx+1}/{files_len}] path={file}")
         items.append(new_item)
