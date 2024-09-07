@@ -1,22 +1,22 @@
 import os
 import subprocess
 import select
+import shutil
 import tempfile
-from plyer.utils import sys
 import toml
 import logging
 import copy
 import click
 import json
 import glob
-import Levenshtein as lev
-from plyer import notification
+import sys
+import Levenshtein
 from pathlib import Path
 from collections import defaultdict
 from lxml import etree
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger()
 
@@ -31,13 +31,11 @@ item_tpl = {
 metadata_suffixes = [".cue", ".m3u"]
 
 
-def notify(title, message):
-    notification.notify(
-        title=title,
-        message=message,
-        app_icon=None,
-        timeout=3,
-    )
+def check_executable_exists(executable_name):
+    executable_path = shutil.which(executable_name)
+    if not executable_path:
+        print(f"Executable '{executable_name}' not found.")
+        sys.exit(-1)
 
 
 def match_system(system_name, playlists):
@@ -49,8 +47,8 @@ def match_system(system_name, playlists):
         for playlist in playlists:
             n1 = playlist.get("name")
             n2 = playlist.get("remote_folder")
-            d1 = lev.distance(n1, system_name, weights=(1, 1, 2))
-            d2 = lev.distance(n2, system_name, weights=(1, 1, 2))
+            d1 = Levenshtein.distance(n1, system_name, weights=(1, 1, 2))
+            d2 = Levenshtein.distance(n2, system_name, weights=(1, 1, 2))
             if d1 < dt1:
                 dt1 = d1
                 dt1_name = n1
@@ -105,7 +103,6 @@ def backup_file(file_path):
 def find_dat(local_rom_dir):
     name_map = {}
     files = glob.glob(str(local_rom_dir / "*.dat"))
-    files.sort()
     if not len(files) == 1:
         return name_map
     dat_file = files.pop()
@@ -240,7 +237,6 @@ def copy_playlist(default, playlist, temp_file, dry_run):
     execute(cmd, dry_run)
     cmd = f'scp "{temp_file.name}" "{hostname}:{remote}"'
     execute(cmd, dry_run)
-    notify("Copy Playlist", f"Copy {name}")
 
 
 def sync_roms(default, playlist, sync_roms_local, dry_run):
@@ -253,6 +249,7 @@ def sync_roms(default, playlist, sync_roms_local, dry_run):
             "remote_folder"
         )
     else:
+        assert os.path.isdir(str(sync_roms_local))
         remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
 
     assert os.path.isdir(local_rom_dir)
@@ -267,8 +264,6 @@ def sync_roms(default, playlist, sync_roms_local, dry_run):
         cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable --size-only --ignore-times --delete --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{remote_rom_dir}"'
         execute(cmd, dry_run)
 
-    notify("Rsync Roms", f"{name}")
-
 
 def sync_bios(default, dry_run):
     logger.info("sync_bios:")
@@ -278,7 +273,6 @@ def sync_bios(default, dry_run):
     assert os.path.isdir(local_bios)
     cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
-    notify("Rsync Bios", "")
 
 
 def sync_thumbnails(default, dry_run):
@@ -289,7 +283,6 @@ def sync_thumbnails(default, dry_run):
     assert os.path.isdir(local_bios)
     cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --delete "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
-    notify("Rsync thumbnails", "")
 
 
 @click.command()
@@ -340,6 +333,9 @@ def main(
 ):
     if do_debug:
         logger.setLevel(logging.DEBUG)
+
+    for command in ["ssh", "scp", "rsync"]:
+        check_executable_exists(command)
 
     if do_all:
         do_sync_playlists = do_sync_roms = do_sync_bios = True

@@ -5,3 +5,4 @@ pyobjus
 plyer
 Levenshtein
 lxml
+rich

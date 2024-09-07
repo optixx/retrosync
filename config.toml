@@ -20,32 +20,44 @@ remote_cores_suffix = ".so"
 name = "Atari - 2600.lpl"
 local_folder = "Atari - 2600"
 remote_folder = "atari2600"
+core_path =  "prosystem_libretro"
+core_name = "Atari - 2600 (Stella)"
 
 
 [[playlists]]
 name = "Atari - 7800.lpl"
 local_folder = "Atari - 7800"
 remote_folder = "atari7800"
+core_path =  "prosystem_libretro"
+core_name = "Atari - 7800 (ProSystem)"
 
 [[playlists]]
 name = "Atari - Lynx.lpl"
 local_folder = "Atari - Lynx"
 remote_folder = "atarilynx"
+core_path = "handy_libretro"
+core_name = "Atari - Lynx (Handy)"
 
 [[playlists]]
 name = "Atari - Jaguar.lpl"
 local_folder = "Atari - Jaguar"
 remote_folder = "atarijaguar"
+core_path =  "virtualjaguar_libretro"
+core_name =  "Atari - Jaguar (Virtual Jaguar)"
 
 [[playlists]]
 name = "FBNeo - Arcade Games.lpl"
 local_folder = "SNK - Neo Geo"
 remote_folder = "neogeo"
+core_path  = "fbneo_libretro"
+core_name = "Arcade (FinalBurn Neo)"
 
 [[playlists]]
 name = "MAME 2003-Plus.lpl"
 local_folder = "MAME 2003-Plus"
 remote_folder = "mame"
+core_path = "mame2003_plus_libretro"
+core_name = "Arcade (MAME 2003-Plus)"
 
 [[playlists]]
 name = "Nintendo - Game Boy Advance.lpl"
