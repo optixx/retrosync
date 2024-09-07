@@ -2,7 +2,6 @@ toml
 retrying
 click
 pyobjus
-plyer
 Levenshtein
 lxml
 rich
