@@ -15,10 +15,8 @@ from pathlib import Path
 from collections import defaultdict
 from lxml import etree
 
-logging.basicConfig(
-    level=logging.DEBUG, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger()
+logger = None
+
 
 item_tpl = {
     "path": "",
@@ -145,6 +143,14 @@ def update_playlist(default, playlist, dry_run):
 
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
     assert os.path.isdir(local_rom_dir)
+
+    core_path = Path(default.get("local_cores")) / playlist.get("core_path")
+    core_path = core_path.with_suffix(default.get("local_cores_suffix"))
+    data["default_core_path"] = str(core_path)
+    data["default_core_name"] = playlist.get("core_name")
+    data["scan_content_dir"] = str(local_rom_dir)
+    data["scan_dat_file_path"] = str(local_rom_dir)
+
     prefer_metadata_files = find_metadata(local_rom_dir)
     name_map = find_dat(local_rom_dir)
     items = []
@@ -280,9 +286,19 @@ def sync_thumbnails(default, dry_run):
 
 
 @click.command()
-@click.option("--all", "-a", "do_all", is_flag=True, help="Sync all file")
 @click.option(
-    "--sync-playlists", "-p", "do_sync_playlists", is_flag=True, help="Sync playlist"
+    "--all",
+    "-a",
+    "do_all",
+    is_flag=True,
+    help="Sync all files (roms, playlists and bios files)",
+)
+@click.option(
+    "--sync-playlists",
+    "-p",
+    "do_sync_playlists",
+    is_flag=True,
+    help="Sync playlist files",
 )
 @click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync bios files")
 @click.option(
@@ -298,16 +314,20 @@ def sync_thumbnails(default, dry_run):
     "-u",
     "do_update_playlists",
     is_flag=True,
-    help="Update local playlist",
+    help="Update local playlist files with the results from scanning the local rom folder",
 )
 @click.option(
     "--sync-roms-local",
     "-l",
     default=None,
-    help="Sync roms files to local path mounted path (Sdcard)",
+    help="Sync roms files to local path, to e.g sync to mounted sdcard)",
 )
 @click.option(
-    "--name", "-n", "system_name", default=None, help="Process only one specific system"
+    "--name",
+    "-n",
+    "system_name",
+    default=None,
+    help="Filter and process only one specific system",
 )
 @click.option(
     "--config-file",
@@ -317,7 +337,13 @@ def sync_thumbnails(default, dry_run):
     help="Use config file",
 )
 @click.option("--dry-run", "-D", is_flag=True, help="Dry run")
-@click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
+@click.option(
+    "--debug",
+    "-d",
+    "do_debug",
+    is_flag=True,
+    help="Enable debug logging to debug.log logfile",
+)
 @click.option("--yes", is_flag=True)
 def main(
     do_all,
@@ -333,8 +359,22 @@ def main(
     do_debug,
     yes,
 ):
+    global logger
     if do_debug:
-        logger.setLevel(logging.DEBUG)
+        logging.basicConfig(
+            filename="debug.log",
+            filemode="a",
+            level=logging.DEBUG,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+        )
+        logger = logging.getLogger()
+    else:
+        logging.basicConfig(
+            level=logging.WARN,
+            format="%(asctime)s - %(levelname)s - %(message)s",
+        )
+        logger = logging.getLogger()
+        logger.disabled = True
 
     for command in ["ssh", "scp", "rsync"]:
         check_executable_exists(command)
