@@ -143,7 +143,7 @@ def update_playlist(default, playlist, dry_run):
     with open(local, "r") as file:
         data = json.load(file)
 
-    local_rom_dir = Path(default.get("local_roms_alt")) / playlist.get("local_folder")
+    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
     assert os.path.isdir(local_rom_dir)
     prefer_metadata_files = find_metadata(local_rom_dir)
     name_map = find_dat(local_rom_dir)
@@ -190,11 +190,7 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
         .replace(default.get("local_cores"), default.get("remote_cores"))
     )
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    local_rom_dir_alt = Path(default.get("local_roms_alt")) / playlist.get(
-        "local_folder"
-    )
     assert os.path.isdir(local_rom_dir)
-    assert os.path.isdir(local_rom_dir_alt)
     remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
     data["default_core_path"] = core_path
     data["scan_content_dir"] = str(remote_rom_dir)
@@ -214,7 +210,6 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
         )
         assert os.path.isfile(local_path)
         new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
-        new_path = new_path.replace(str(local_rom_dir_alt), str(remote_rom_dir))
         new_item["path"] = new_path
         items.append(new_item)
 
@@ -222,7 +217,6 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
     doc = json.dumps(data)
     logger.debug(json.dumps(data, indent=2))
     assert str(local_rom_dir) not in doc
-    assert str(local_rom_dir_alt) not in doc
     temp_file.write(doc.encode("utf-8"))
     temp_file.flush()
     temp_file.seek(0)
@@ -315,6 +309,13 @@ def sync_thumbnails(default, dry_run):
 @click.option(
     "--name", "-n", "system_name", default=None, help="Process only one specific system"
 )
+@click.option(
+    "--config-file",
+    "-c",
+    "config_file",
+    default="steamdeck.conf",
+    help="Use config file",
+)
 @click.option("--dry-run", "-D", is_flag=True, help="Dry run")
 @click.option("--debug", "-d", "do_debug", is_flag=True, help="Enable debug logging")
 @click.option("--yes", is_flag=True)
@@ -327,6 +328,7 @@ def main(
     do_update_playlists,
     sync_roms_local,
     system_name,
+    config_file,
     dry_run,
     do_debug,
     yes,
@@ -340,7 +342,7 @@ def main(
     if do_all:
         do_sync_playlists = do_sync_roms = do_sync_bios = True
 
-    config = toml.load("config.toml")
+    config = toml.load(config_file)
     default = config.get("default")
     playlists = config.get("playlists", [])
     if system_name:
