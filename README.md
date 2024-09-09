@@ -1,24 +1,21 @@
 [![Supported Python Versions](https://img.shields.io/pypi/pyversions/rich/13.2.0)]
 
-
-Retrosync is a Python script to sync [Retroarch](https://retroarch.com] playlists and roms from your desktop computer to your Steamdeck.
-
-![Features](https://github.com/textualize/rich/raw/master/imgs/features.png)
+Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlists and ROMs from your desktop computer to your Steam Deck.
 
 
-- Sync Retroarch playlists from Desktop to Steamdeck
-- Sync roms files and purge unused roms on remote
-- Sync bios files
+## Features
+- Sync Retroarch playlists from Desktop to Steam Deck
+- Sync ROM files and purge unused ROMs on remote
+- Sync BIOS files
 - Sync thumbnail images
-- Re-create local playlist by scanning local folders
-- Support for xml dat archives
+- Re-create local playlists by scanning local folders
+- Support for XML DAT archives
 - Configure your cores per system
-- Sync roms to a local mounted SDcard
-
+- Sync ROMs to a locally mounted SD card
 
 ## Compatibility
 
-Retrosync works with Linux, macOS and relies on installed tools like _ssh_ and _rsync_.
+Retrosync works with Linux and macOS, and relies on installed tools like _ssh_ and _rsync_.
 
 ## Installing
 
@@ -28,12 +25,11 @@ Install the dependencies using the included Makefile, that utilize [UV](https://
 make install
 ```
 
-
 ## Configuration
 
-By default the steamdeck.toml is used. You can change the used configfile via the command switch `--config-file`  to provide a different filename.
+By default, the `steamdeck.toml` configuration file is used. You can change the config file via the command switch `--config-file` to provide a different filename.
 
-In this sample configuration a sample setup is provided for the local desktop Retroarch related files and your local rom locations. The same goes for the remote side for your steamdeck. The details can look a a bit different for your Steadeck depending on how you installed Retroarch. In this case Retroarch was installed via [Emudeck](https://www.emudeck.com/) using [Flatpak](https://flatpak.org/).
+In this sample configuration, a setup is provided for the local desktop Retroarch-related files and your local ROM locations. The same goes for the remote side on your Steam Deck. The details may look a bit different on your Steam Deck, depending on how you installed Retroarch. In this case, Retroarch was installed via [Emudeck](https://www.emudeck.com/) using [Flatpak](https://flatpak.org/).
 
 
 ```toml
@@ -72,52 +68,47 @@ core_name = "Atari - 7800 (ProSystem)"
 ....
 ```
 
-
-
-
 ## Usage
 
-To sync all you playlists (that have configured in your toml configfile) and roms to your Steamdeck just run:
+To sync all your playlists (that are configured in your TOML config file) and ROMs to your Steam Deck, just run:
 
 ```sh
 python retrosync.py --sync-roms --sync-playlists
 ```
 
-So see whats all the details that are happening you can add `--debug` to write detailed output to `debug.log` file.
+To see all the details of what is happening, you can add `--debug` to write detailed output to the `debug.log` file.
 
 ```sh
 python retrosync.py --sync-roms --sync-playlists --debug
 ```
 
-To sync  all local resource (playlists, roms, bios files and thumbnails) to your Steamdeck
+To sync all local resources (playlists, ROMs, BIOS files, and thumbnails) to your Steam Deck:
 
 ```sh
 python retrosync.py --all
 ```
 
-The actions for playlist and rom can be scoped to one system, like so:
+The actions for playlists and ROMs can be scoped to one system, like so:
 
 ```sh
-python retrosync.py --debug --sync-roms --sync-playlists  --name "psx"
-Do you want to continue with playlists 'Sony - PlayStation.lpl' ? [y/N]:
+python retrosync.py --debug --sync-roms --sync-playlists --name "psx"
+Do you want to continue with playlists 'Sony - PlayStation.lpl'? [y/N]:
 ```
 
-You can add an `--yes` to skip the prompt.
+You can add `--yes` to skip the prompt.
 
 ```sh
-python retrosync.py --debug --sync-roms --sync-playlists  --name "psx" --yes
+python retrosync.py --debug --sync-roms --sync-playlists --name "psx" --yes
 ```
 
-
-To update and re-create a local playlist by scanning the local rom folder.
+To update and re-create a local playlist by scanning the local ROM folder:
 
 ```sh
-python retrosync.py --debug  --update-playlists  --name "psx"
+python retrosync.py --debug --update-playlists --name "psx"
 ```
 
-You can sync roms to local mounded SDcard
+You can sync ROMs to a locally mounted SD card:
 
 ```sh
-python retrosync.py  --debug --sync-roms-local /Volumes/Steamdeck/roms
+python retrosync.py --debug --sync-roms-local /Volumes/Steamdeck/roms
 ```
-
