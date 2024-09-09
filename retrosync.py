@@ -291,6 +291,11 @@ def expand_config(default):
         "local_roms",
         "local_cores",
         "local_thumbnails",
+        "remote_playlists",
+        "remote_bios",
+        "remote_roms",
+        "remote_cores",
+        "remote_thumbnails",
     ]:
         p = Path(default.get(item)).expanduser()
         default[item] = str(p)
