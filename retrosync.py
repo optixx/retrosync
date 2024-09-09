@@ -10,13 +10,12 @@ import click
 import json
 import glob
 import sys
+import lxml
 import Levenshtein
 from pathlib import Path
 from collections import defaultdict
-from lxml import etree
 
 logger = None
-
 
 item_tpl = {
     "path": "",
@@ -106,7 +105,7 @@ def find_dat(local_rom_dir):
     dat_file = files.pop()
     with open(dat_file, "r") as fd:
         data = fd.read()
-    root = etree.fromstring(data)
+    root = lxml.etree.fromstring(data)
     for game in root.xpath("//game"):
         name_map[game.attrib["name"]] = game.findtext("description")
     return name_map
