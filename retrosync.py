@@ -297,8 +297,7 @@ def expand_config(default):
         "remote_cores",
         "remote_thumbnails",
     ]:
-        p = Path(default.get(item)).expanduser()
-        default[item] = str(p)
+        default[item] = str(Path(default.get(item)).expanduser())
     return default
 
 
