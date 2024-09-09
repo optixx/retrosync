@@ -15,7 +15,7 @@ import Levenshtein
 from pathlib import Path
 from collections import defaultdict
 
-logger = None
+logger = logging.getLogger()
 
 item_tpl = {
     "path": "",

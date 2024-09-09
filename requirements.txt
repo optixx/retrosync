@@ -1,7 +1,5 @@
 toml
-retrying
 click
-pyobjus
 Levenshtein
 lxml
 rich

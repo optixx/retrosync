@@ -1,4 +1,4 @@
-[![Supported Python Versions](https://img.shields.io/pypi/pyversions/rich/13.2.0)]
+![Supported Python Versions](https://img.shields.io/pypi/pyversions/rich/13.2.0)
 
 Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlists and ROMs from your desktop computer to your Steam Deck.
 
@@ -65,7 +65,6 @@ remote_folder = "atari7800"
 core_path =  "prosystem_libretro"
 core_name = "Atari - 7800 (ProSystem)"
 
-....
 ```
 
 ## Usage
