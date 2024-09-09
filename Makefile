@@ -11,6 +11,3 @@ pip:
 	uv pip install -r requirements.txt
 
 install: homebrew bootstrap pip
-
-run:
-	uv run app.py --all --dry-run

@@ -399,28 +399,24 @@ def main(
     if do_sync_thumbails:
         sync_thumbnails(default, dry_run)
 
-    if do_sync_playlists or do_sync_roms or system_name:
-        for playlist in config.get("playlists", []):
-            if system_name and system_name != playlist.get("name"):
-                logger.debug(
-                    "main: Skip %s looking for config %s",
-                    playlist.get("name"),
-                    system_name,
-                )
-                continue
+    if system_name:
+        playlists = [
+            p for p in config.get("playlists", []) if p.get("name") == system_name
+        ]
+    else:
+        playlists = config.get("playlists", [])
+    for playlist in playlists:
+        logger.info("main: Process %s", playlist.get("name"))
+        if do_update_playlists:
+            update_playlist(default, playlist, dry_run)
 
-            logger.info("main: Process %s", playlist.get("name"))
+        if do_sync_playlists:
+            with tempfile.NamedTemporaryFile() as temp_file:
+                migrate_playlist(default, playlist, temp_file, dry_run)
+                copy_playlist(default, playlist, temp_file, dry_run)
 
-            if do_update_playlists:
-                update_playlist(default, playlist, dry_run)
-
-            if do_sync_playlists:
-                with tempfile.NamedTemporaryFile() as temp_file:
-                    migrate_playlist(default, playlist, temp_file, dry_run)
-                    copy_playlist(default, playlist, temp_file, dry_run)
-
-            if do_sync_roms:
-                sync_roms(default, playlist, sync_roms_local, dry_run)
+        if do_sync_roms:
+            sync_roms(default, playlist, sync_roms_local, dry_run)
 
 
 if __name__ == "__main__":
