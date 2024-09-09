@@ -229,7 +229,7 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
 
 def copy_playlist(default, playlist, temp_file, dry_run):
     name = playlist.get("name")
-    logger.debug("copy_playlist: name={name}")
+    logger.debug(f"copy_playlist: name={name}")
     hostname = default.get("hostname")
     remote = Path(default.get("remote_playlists")) / name
     cmd = f"ssh {hostname} \"cp -v '{remote}' '{remote}.bak'\""
@@ -282,6 +282,19 @@ def sync_thumbnails(default, dry_run):
     assert os.path.isdir(local_bios)
     cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --delete "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
+
+
+def expand_config(default):
+    for item in [
+        "local_playlists",
+        "local_bios",
+        "local_roms",
+        "local_cores",
+        "local_thumbnails",
+    ]:
+        p = Path(default.get(item)).expanduser()
+        default[item] = str(p)
+    return default
 
 
 @click.command()
@@ -382,7 +395,7 @@ def main(
         do_sync_playlists = do_sync_roms = do_sync_bios = True
 
     config = toml.load(config_file)
-    default = config.get("default")
+    default = expand_config(config.get("default"))
     playlists = config.get("playlists", [])
     if system_name:
         system_name = match_system(system_name, playlists)
