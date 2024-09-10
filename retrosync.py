@@ -307,7 +307,7 @@ def expand_config(default):
     "-a",
     "do_all",
     is_flag=True,
-    help="Sync all files (roms, playlists and bios files)",
+    help="Sync all files (ROMs, playlists, BIOS files and thumbnails)",
 )
 @click.option(
     "--sync-playlists",
@@ -316,7 +316,7 @@ def expand_config(default):
     is_flag=True,
     help="Sync playlist files",
 )
-@click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync bios files")
+@click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync BIOS files")
 @click.option(
     "--sync-thumbnails",
     "-t",
@@ -324,19 +324,19 @@ def expand_config(default):
     is_flag=True,
     help="Sync thumbnails files",
 )
-@click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync roms files")
+@click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync ROMs files")
 @click.option(
     "--update-playlists",
     "-u",
     "do_update_playlists",
     is_flag=True,
-    help="Update local playlist files with the results from scanning the local rom folder",
+    help="Update local playlist files with the results from scanning the local ROM folders",
 )
 @click.option(
     "--sync-roms-local",
     "-l",
     default=None,
-    help="Sync roms files to local path, to e.g sync to mounted sdcard)",
+    help="Sync ROMs to local path, to e.g sync to mounted SDcard)",
 )
 @click.option(
     "--name",
@@ -352,7 +352,9 @@ def expand_config(default):
     default="steamdeck.conf",
     help="Use config file",
 )
-@click.option("--dry-run", "-D", is_flag=True, help="Dry run")
+@click.option(
+    "--dry-run", "-D", is_flag=True, help="Dry run, don't sync or create anything"
+)
 @click.option(
     "--debug",
     "-d",
@@ -360,7 +362,7 @@ def expand_config(default):
     is_flag=True,
     help="Enable debug logging to debug.log logfile",
 )
-@click.option("--yes", is_flag=True)
+@click.option("--yes", is_flag=True, help="Skip prompt inputs")
 def main(
     do_all,
     do_sync_playlists,
