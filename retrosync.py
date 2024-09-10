@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+
+__author__ = "Optixx"
+__license__ = "MIT"
+__version__ = "0.1.0"
+__maintainer__ = "David Voswinkel"
+__email__ = "david@optixx.org"
+
 import os
 import subprocess
 import select
