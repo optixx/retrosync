@@ -57,7 +57,7 @@ remote_cores_suffix = ".so"
 name = "Atari - 2600.lpl"
 local_folder = "Atari - 2600"
 remote_folder = "atari2600"
-core_path =  "prosystem_libretro"
+core_path =  "stellalibretro"
 core_name = "Atari - 2600 (Stella)"
 
 
