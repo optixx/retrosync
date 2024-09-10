@@ -72,6 +72,10 @@ core_name = "Atari - 7800 (ProSystem)"
 
 ## Usage
 
+
+
+![Usage](https://github.com/optixx/retrosync/raw/main/assets/img/usage.png)
+
 To sync all your playlists (that are configured in your TOML config file) and ROMs to your Steam Deck, just run:
 
 ```sh
