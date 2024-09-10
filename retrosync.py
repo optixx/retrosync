@@ -18,6 +18,7 @@ import click
 import json
 import glob
 import sys
+import platform
 import lxml
 import Levenshtein
 from pathlib import Path
@@ -34,6 +35,17 @@ item_tpl = {
     "db_name": "",
 }
 metadata_suffixes = [".cue", ".m3u"]
+
+
+def check_platform():
+    current_platform = platform.system()
+    if current_platform not in ["Darwin", "Linux"]:
+        print(
+            f"This script only runs on macOS or Linux, but you're using {current_platform}. Exiting..."
+        )
+        sys.exit(1)
+    else:
+        print(f"Running on {current_platform}. Proceeding...")
 
 
 def check_executable_exists(executable_name):
@@ -386,6 +398,7 @@ def main(
     yes,
 ):
     global logger
+    check_platform()
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
