@@ -444,6 +444,7 @@ def main(
         ]
     else:
         playlists = config.get("playlists", [])
+
     for playlist in playlists:
         logger.info("main: Process %s", playlist.get("name"))
         if do_update_playlists:
