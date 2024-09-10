@@ -1,5 +1,8 @@
 ![Supported Python Versions](https://img.shields.io/pypi/pyversions/rich/13.2.0)
 
+
+![Logo]
+![Logo](https://github.com/toptixx/retrosync/raw/master/assets/img/logo.png)
 Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlists and ROMs from your desktop computer to your Steam Deck.
 
 
