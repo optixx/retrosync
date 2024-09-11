@@ -500,7 +500,7 @@ def main(
         playlists = config.get("playlists", [])
 
     systems = {}
-    for playlist in playlists:
+    for idx, playlist in enumerate(playlists):
         name = Path(playlist.get("name")).stem
         systems[name] = {"name": name, "playlist": playlist}
 

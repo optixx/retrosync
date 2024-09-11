@@ -16,6 +16,10 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 - Configure your cores per system
 - Sync ROMs to a locally mounted SD card
 
+
+
+![Demo](https://github.com/optixx/retrosync/raw/main/assets/img/demo.gif)
+
 ## Compatibility
 
 Retrosync works with Linux and macOS, and relies on installed tools like _ssh_ and _rsync_.
