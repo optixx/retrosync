@@ -502,7 +502,8 @@ def main(
     systems = {}
     for idx, playlist in enumerate(playlists):
         name = Path(playlist.get("name")).stem
-        systems[name] = {"name": name, "playlist": playlist}
+        if not playlist.get("disabled", False):
+            systems[name] = {"name": name, "playlist": playlist}
 
     overall_task_id = overall_progress.add_task("", total=len(jobs) + len(systems))
 
