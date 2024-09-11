@@ -19,10 +19,22 @@ import json
 import glob
 import sys
 import platform
-import lxml
+import time
 import Levenshtein
+from lxml import etree
 from pathlib import Path
 from collections import defaultdict
+from rich.console import Group
+from rich.panel import Panel
+from rich.live import Live
+from rich.progress import (
+    BarColumn,
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    TimeElapsedColumn,
+)
+
 
 logger = logging.getLogger()
 
@@ -35,6 +47,35 @@ item_tpl = {
     "db_name": "",
 }
 metadata_suffixes = [".cue", ".m3u"]
+
+current_system_progress = Progress(
+    TimeElapsedColumn(),
+    TextColumn("{task.description}"),
+)
+
+step_progress = Progress(
+    TextColumn("  "),
+    TimeElapsedColumn(),
+    TextColumn("[bold purple]{task.fields[action]}"),
+    SpinnerColumn("simpleDots"),
+)
+
+system_steps_progress = Progress(
+    TextColumn(
+        "[bold blue]Progress for system {task.fields[name]}: {task.percentage:.0f}%"
+    ),
+    BarColumn(),
+    TextColumn("({task.completed} of {task.total} steps done)"),
+)
+
+overall_progress = Progress(
+    TimeElapsedColumn(), BarColumn(), TextColumn("{task.description}")
+)
+
+progress_group = Group(
+    Panel(Group(current_system_progress, step_progress, system_steps_progress)),
+    overall_progress,
+)
 
 
 def check_platform():
@@ -125,7 +166,7 @@ def find_dat(local_rom_dir):
     dat_file = files.pop()
     with open(dat_file, "r") as fd:
         data = fd.read()
-    root = lxml.etree.fromstring(data)
+    root = etree.fromstring(data)
     for game in root.xpath("//game"):
         name_map[game.attrib["name"]] = game.findtext("description")
     return name_map
@@ -419,7 +460,9 @@ def main(
         check_executable_exists(command)
 
     if do_all:
-        do_sync_playlists = do_sync_roms = do_sync_bios = True
+        do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_thumbails = (
+            do_update_playlists
+        ) = True
 
     config = toml.load(config_file)
     default = expand_config(config.get("default"))
@@ -432,11 +475,22 @@ def main(
             ):
                 sys.exit(-1)
 
+    jobs = {}
     if do_sync_bios:
-        sync_bios(default, dry_run)
+        jobs["bios"] = {"name": "BIOS", "handler": "sync_bios"}
 
     if do_sync_thumbails:
-        sync_thumbnails(default, dry_run)
+        jobs["thumbnails"] = {"name": "Thumbnails", "handler": "sync_thumbnails"}
+
+    system_step_actions = {}
+    if do_update_playlists:
+        system_step_actions["update_playlist"] = {"name": "Update Playlist"}
+
+    if do_sync_playlists:
+        system_step_actions["sync_playlists"] = {"name": "Sync Playlist"}
+
+    if do_sync_roms:
+        system_step_actions["sync_roms"] = {"name": "Sync ROMs"}
 
     if system_name:
         playlists = [
@@ -445,18 +499,99 @@ def main(
     else:
         playlists = config.get("playlists", [])
 
+    systems = {}
     for playlist in playlists:
-        logger.info("main: Process %s", playlist.get("name"))
-        if do_update_playlists:
-            update_playlist(default, playlist, dry_run)
+        name = Path(playlist.get("name")).stem
+        systems[name] = {"name": name, "playlist": playlist}
 
-        if do_sync_playlists:
-            with tempfile.NamedTemporaryFile() as temp_file:
-                migrate_playlist(default, playlist, temp_file, dry_run)
-                copy_playlist(default, playlist, temp_file, dry_run)
+    overall_task_id = overall_progress.add_task("", total=len(jobs) + len(systems))
 
-        if do_sync_roms:
-            sync_roms(default, playlist, sync_roms_local, dry_run)
+    with Live(progress_group):
+        for (
+            idx,
+            key,
+        ) in enumerate(jobs.keys()):
+            name = jobs[key]["name"]
+            handler = globals()[jobs[key]["handler"]]
+            top_descr = "[bold #AAAAAA](%d out of %d jobs done)" % (
+                idx,
+                len(jobs),
+            )
+            overall_progress.update(overall_task_id, description=top_descr)
+            current_task_id = current_system_progress.add_task("Run job %s" % name)
+            system_steps_task_id = system_steps_progress.add_task(
+                "", total=2, name=name
+            )
+            system_steps_progress.update(system_steps_task_id, advance=1)
+            handler(default, dry_run)
+            if dry_run:
+                time.sleep(0.2)
+            system_steps_progress.update(system_steps_task_id, advance=1)
+            system_steps_progress.update(system_steps_task_id, visible=False)
+            current_system_progress.stop_task(current_task_id)
+            current_system_progress.update(
+                current_task_id, description="[bold green]%s synced!" % name
+            )
+            overall_progress.update(overall_task_id, advance=1)
+
+        overall_progress.update(
+            overall_task_id,
+            description="[bold green]%s jobs processed, done!" % len(systems),
+        )
+
+        for (
+            idx,
+            key,
+        ) in enumerate(systems.keys()):
+            name = systems[key]["name"]
+            playlist = systems[key]["playlist"]
+            logger.info("main: Process %s", playlist.get("name"))
+            top_descr = "[bold #AAAAAA](%d out of %d systems synced)" % (
+                idx,
+                len(systems),
+            )
+            overall_progress.update(overall_task_id, description=top_descr)
+            current_task_id = current_system_progress.add_task(
+                "Syncing system %s" % name
+            )
+            system_steps_task_id = system_steps_progress.add_task(
+                "", total=len(system_step_actions), name=name
+            )
+            for action_key in system_step_actions:
+                action = system_step_actions[action_key]["name"]
+                step_task_id = step_progress.add_task("", action=action, name=name)
+                if dry_run:
+                    time.sleep(0.2)
+
+                if do_update_playlists:
+                    update_playlist(default, playlist, dry_run)
+
+                if do_sync_playlists:
+                    with tempfile.NamedTemporaryFile() as temp_file:
+                        migrate_playlist(default, playlist, temp_file, dry_run)
+                        copy_playlist(default, playlist, temp_file, dry_run)
+
+                if do_sync_roms:
+                    sync_roms(default, playlist, sync_roms_local, dry_run)
+
+                step_progress.update(step_task_id, advance=1)
+                step_progress.stop_task(step_task_id)
+                step_progress.update(step_task_id, visible=False)
+                system_steps_progress.update(system_steps_task_id, advance=1)
+
+            if dry_run:
+                time.sleep(0.2)
+            system_steps_progress.update(system_steps_task_id, visible=False)
+            current_system_progress.stop_task(current_task_id)
+            current_system_progress.update(
+                current_task_id, description="[bold green]%s synced!" % name
+            )
+            overall_progress.update(overall_task_id, advance=1)
+
+        overall_progress.update(
+            overall_task_id,
+            description="[bold green]%s systems processed, done!" % len(systems),
+        )
 
 
 if __name__ == "__main__":
