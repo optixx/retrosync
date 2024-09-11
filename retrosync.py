@@ -103,6 +103,8 @@ def match_system(system_name, playlists):
         dt2 = 1_000
         dt2_name = None
         for playlist in playlists:
+            if playlist.get("disabled", False):
+                continue
             n1 = playlist.get("name")
             n2 = playlist.get("remote_folder")
             d1 = Levenshtein.distance(n1, system_name, weights=(1, 1, 2))
@@ -220,6 +222,9 @@ def update_playlist(default, playlist, dry_run):
     for idx, file in enumerate(files):
         if Path(file).is_dir():
             subs = glob.glob(str(Path(file) / "*.cue"))
+            if len(subs) == 1:
+                file = subs.pop()
+            subs = glob.glob(str(Path(file) / "*FD*.zip"))
             if len(subs) == 1:
                 file = subs.pop()
 
