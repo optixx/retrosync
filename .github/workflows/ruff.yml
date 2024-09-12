@@ -19,7 +19,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.x'  # Change to your Python version, e.g., '3.9'
+          python-version: '3.12'
 
       - name: Install dependencies
         run: |
@@ -34,5 +34,5 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: ruff-lint-results
-          path: . # Adjust this if you want to store only specific files.
+          path: .
 
