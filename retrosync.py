@@ -194,6 +194,14 @@ def find_metadata(local_rom_dir):
 
 
 def update_playlist(default, playlist, dry_run):
+    def make_item(file):
+        stem = str(Path(file).stem)
+        new_item = copy.copy(item_tpl)
+        new_item["path"] = file
+        new_item["label"] = name_map.get(stem, stem)
+        new_item["db_name"] = local.name
+        return new_item
+
     name = playlist.get("name")
     logger.debug(f"migrate_playlist: name={name}")
     local = Path(default.get("local_playlists")) / name
@@ -220,25 +228,30 @@ def update_playlist(default, playlist, dry_run):
     files.sort()
     files_len = len(files)
     for idx, file in enumerate(files):
+        logger.debug(f"update_playlist: Update [{idx+1}/{files_len}] path={file}")
         if Path(file).is_dir():
             subs = glob.glob(str(Path(file) / "*.cue"))
             if len(subs) == 1:
                 file = subs.pop()
+                items.append(make_item(file))
+                continue
+
             subs = glob.glob(str(Path(file) / "*FD*.zip"))
-            if len(subs) == 1:
-                file = subs.pop()
+            if len(subs) > 0:
+                for file in subs:
+                    items.append(make_item(file))
+                continue
+
+            subs = glob.glob(str(Path(file) / "*.zip"))
+            if len(subs) > 0:
+                for file in subs:
+                    items.append(make_item(file))
+                continue
 
         if prefer_metadata_files:
             if Path(file).suffix not in metadata_suffixes:
                 continue
-
-        stem = str(Path(file).stem)
-        new_item = copy.copy(item_tpl)
-        new_item["path"] = file
-        new_item["label"] = name_map.get(stem, stem)
-        new_item["db_name"] = local.name
-        logger.debug(f"update_playlist: Update [{idx+1}/{files_len}] path={file}")
-        items.append(new_item)
+        items.append(make_item(file))
 
     data["items"] = items
     doc = json.dumps(data, indent=2)
