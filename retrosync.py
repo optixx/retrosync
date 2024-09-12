@@ -185,10 +185,11 @@ def find_metadata(local_rom_dir):
 
     # Are there any metadata files
     # And do we have multiple files with the same stem?
-    if (
-        set(metadata_suffixes).issubset(suffixes.keys())
-        and max(list(set(names.values()))) >= 2
-    ):
+    match = False
+    for s in metadata_suffixes:
+        if s in suffixes.keys():
+            match = True
+    if match and max(list(set(names.values()))) >= 2:
         return True
     return False
 
