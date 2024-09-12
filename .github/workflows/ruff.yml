@@ -28,7 +28,7 @@ jobs:
 
       - name: Run Ruff Linter
         run: |
-          ruff . --fix
+          ruff check --output-format=github .
           
       - name: Upload Ruff results as artifact (optional)
         uses: actions/upload-artifact@v3
