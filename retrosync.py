@@ -227,6 +227,30 @@ def update_playlist(default, playlist, dry_run):
     blacklist = playlist.get("local_blacklist", False)
 
     prefer_metadata_files = find_metadata(local_rom_dir)
+    if playlist.get("local_create_m3u"):
+        logger.debug("update_playlist: Create m3u files")
+        m3u_pattern = playlist.get("local_m3u_pattern")
+        m3u_whitelist = playlist.get("local_m3u_whitelist")
+        files = defaultdict(list)
+        all_files = os.listdir(local_rom_dir)
+        all_files.sort()
+        for filename in all_files:
+            if re.compile(m3u_whitelist).search(filename):
+                e = re.compile(m3u_pattern)
+                m = e.match(filename)
+                if m:
+                    base_name = m.groups()[0].strip()
+                else:
+                    base_name = Path(filename).stem
+                files[base_name].append(filename)
+
+        for base_name, files in files.items():
+            m3u_file = os.path.join(local_rom_dir, f"{base_name}.m3u")
+            with open(m3u_file, "w") as f:
+                logger.debug(f"update_playlist: Create  {m3u_file}")
+                for filename in sorted(files):
+                    f.write(f"{filename}\n")
+    return
     name_map = find_dat(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
