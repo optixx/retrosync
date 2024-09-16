@@ -20,6 +20,7 @@ import glob
 import sys
 import platform
 import time
+import re
 import Levenshtein
 from lxml import etree
 from pathlib import Path
@@ -222,37 +223,53 @@ def update_playlist(default, playlist, dry_run):
     data["scan_content_dir"] = str(local_rom_dir)
     data["scan_dat_file_path"] = str(local_rom_dir)
 
+    whitelist = playlist.get("local_whitelist", False)
+    blacklist = playlist.get("local_blacklist", False)
+
     prefer_metadata_files = find_metadata(local_rom_dir)
     name_map = find_dat(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
     files.sort()
     files_len = len(files)
+
+    file_list = []
+    # First Pass
     for idx, file in enumerate(files):
-        logger.debug(f"update_playlist: Update [{idx+1}/{files_len}] path={file}")
+        logger.debug(
+            f"update_playlist: Update first pass [{idx+1}/{files_len}] path={file}"
+        )
         if Path(file).is_dir():
-            subs = glob.glob(str(Path(file) / "*.cue"))
-            if len(subs) == 1:
-                file = subs.pop()
+            subs = glob.glob(str(Path(file) / "*"))
+            for sub in subs:
+                file_list.append(sub)
+        else:
+            file_list.append(file)
+
+    # Second Pass
+    files_len = len(file_list)
+    for idx, file in enumerate(file_list):
+        logger.debug(
+            f"update_playlist: Update second pass [{idx+1}/{files_len}] path={file}"
+        )
+
+        if blacklist:
+            if re.compile(blacklist).search(file):
+                logger.debug(f"update_playlist: Skip {file} is blacklisted")
+                continue
+
+        if whitelist:
+            if re.compile(whitelist).search(file):
+                logger.debug(f"update_playlist: Add {file} is whitelisted")
                 items.append(make_item(file))
-                continue
+        else:
+            items.append(make_item(file))
 
-            subs = glob.glob(str(Path(file) / "*FD*.zip"))
-            if len(subs) > 0:
-                for file in subs:
-                    items.append(make_item(file))
-                continue
+        # if prefer_metadata_files:
+        #    if Path(file).suffix not in metadata_suffixes:
+        #        continue
 
-            subs = glob.glob(str(Path(file) / "*.zip"))
-            if len(subs) > 0:
-                for file in subs:
-                    items.append(make_item(file))
-                continue
-
-        if prefer_metadata_files:
-            if Path(file).suffix not in metadata_suffixes:
-                continue
-        items.append(make_item(file))
+    items.append(make_item(file))
 
     data["items"] = items
     doc = json.dumps(data, indent=2)
