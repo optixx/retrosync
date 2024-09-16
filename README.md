@@ -72,6 +72,29 @@ remote_folder = "atari7800"
 core_path =  "prosystem_libretro"
 core_name = "Atari - 7800 (ProSystem)"
 
+[[playlists]]
+name = "Sharp - X68000.lpl"
+local_folder = "Sharp - X68000"
+local_whitelist = '.*FD.*\.zip'
+local_blacklist = '.*HD.*\.zip'
+remote_folder = "x68000"
+core_path = "px68k_libretro"
+core_name = "Sharp - X68000 (PX68k)"
+disabled = false
+
+[[playlists]]
+name = "Commodore - Amiga.lpl"
+local_folder = "Commodore - Amiga"
+local_whitelist = '\.m3u$'
+local_blacklist = '\.adf$'
+local_create_m3u = true
+local_m3u_whitelist = '\.adf$'
+local_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
+remote_folder = "amiga"
+core_path = "puae_libretro"
+core_name = "Commodore - Amiga (PUAE)"
+disabled = false
+
 ```
 
 ## Usage
