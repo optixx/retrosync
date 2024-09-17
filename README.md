@@ -7,15 +7,15 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 
 
 ## Features
-- Sync Retroarch playlists from Desktop to Steam Deck
-- Sync ROM files and purge unused ROMs on remote
-- Sync BIOS files
-- Sync thumbnail images
-- Re-create local playlists by scanning local folders
-- Support for XML DAT archives
-- Configure your cores per system
-- Sync ROMs to a locally mounted SD card
-
+1. Synchronize RetroArch playlists from Desktop to Steam Deck
+2. Synchronize ROM files and purge unused ROMs on the remote server
+3. Synchronize BIOS files
+4. Synchronize thumbnail images
+5. Recreate local playlists by scanning local folders
+6. Create local m3u files using detection and normalizing regular expressions
+7. Support for XML DAT archives
+8. Configure your cores according to each system
+9. Sync ROMs to a locally mounted SD card (or any other external storage)
 
 
 ![Demo](https://github.com/optixx/retrosync/raw/main/assets/img/demo.gif)
