@@ -174,6 +174,32 @@ def find_dat(local_rom_dir):
     return name_map
 
 
+def create_m3u(playlist, local_rom_dir, dry_run):
+    logger.debug("create_m3u: Create m3u files")
+    m3u_pattern = playlist.get("local_m3u_pattern")
+    m3u_whitelist = playlist.get("local_m3u_whitelist")
+    files = defaultdict(list)
+    all_files = os.listdir(local_rom_dir)
+    all_files.sort()
+    for filename in all_files:
+        if re.compile(m3u_whitelist).search(filename):
+            e = re.compile(m3u_pattern)
+            m = e.match(filename)
+            if m:
+                base_name = m.groups()[0].strip()
+            else:
+                base_name = Path(filename).stem
+            files[base_name].append(filename)
+
+    for base_name, files in files.items():
+        m3u_file = os.path.join(local_rom_dir, f"{base_name}.m3u")
+        if not dry_run:
+            with open(m3u_file, "w") as f:
+                logger.debug(f"create_m3u: Create  {m3u_file}")
+                for filename in sorted(files):
+                    f.write(f"{filename}\n")
+
+
 def update_playlist(default, playlist, dry_run):
     def make_item(file):
         stem = str(Path(file).stem)
@@ -202,33 +228,11 @@ def update_playlist(default, playlist, dry_run):
     data["scan_content_dir"] = str(local_rom_dir)
     data["scan_dat_file_path"] = str(local_rom_dir)
 
+    if playlist.get("local_create_m3u"):
+        create_m3u(playlist, local_rom_dir, dry_run)
+
     whitelist = playlist.get("local_whitelist", False)
     blacklist = playlist.get("local_blacklist", False)
-
-    if playlist.get("local_create_m3u"):
-        logger.debug("update_playlist: Create m3u files")
-        m3u_pattern = playlist.get("local_m3u_pattern")
-        m3u_whitelist = playlist.get("local_m3u_whitelist")
-        files = defaultdict(list)
-        all_files = os.listdir(local_rom_dir)
-        all_files.sort()
-        for filename in all_files:
-            if re.compile(m3u_whitelist).search(filename):
-                e = re.compile(m3u_pattern)
-                m = e.match(filename)
-                if m:
-                    base_name = m.groups()[0].strip()
-                else:
-                    base_name = Path(filename).stem
-                files[base_name].append(filename)
-
-        for base_name, files in files.items():
-            m3u_file = os.path.join(local_rom_dir, f"{base_name}.m3u")
-            with open(m3u_file, "w") as f:
-                logger.debug(f"update_playlist: Create  {m3u_file}")
-                for filename in sorted(files):
-                    f.write(f"{filename}\n")
-
     name_map = find_dat(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
@@ -239,7 +243,7 @@ def update_playlist(default, playlist, dry_run):
     # First Pass
     for idx, file in enumerate(files):
         logger.debug(
-            f"update_playlist: Update first pass [{idx+1}/{files_len}] path={file}"
+            f"update_playlist: Update first pass [{idx+1}/{files_len}] path={Path(file).name}"
         )
         if Path(file).is_dir():
             subs = glob.glob(str(Path(file) / "*"))
@@ -252,22 +256,20 @@ def update_playlist(default, playlist, dry_run):
     files_len = len(file_list)
     for idx, file in enumerate(file_list):
         logger.debug(
-            f"update_playlist: Update second pass [{idx+1}/{files_len}] path={file}"
+            f"update_playlist: Update second pass [{idx+1}/{files_len}] path={Path(file).name}"
         )
 
         if blacklist:
             if re.compile(blacklist).search(file):
-                logger.debug(f"update_playlist: Skip {file} is blacklisted")
+                logger.debug(f"update_playlist: Skip {Path(file).name} is blacklisted")
                 continue
 
         if whitelist:
             if re.compile(whitelist).search(file):
-                logger.debug(f"update_playlist: Add {file} is whitelisted")
+                logger.debug(f"update_playlist: Add {Path(file).name} is whitelisted")
                 items.append(make_item(file))
         else:
             items.append(make_item(file))
-
-    items.append(make_item(file))
 
     data["items"] = items
     doc = json.dumps(data, indent=2)
