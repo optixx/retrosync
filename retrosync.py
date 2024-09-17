@@ -532,6 +532,16 @@ def main(
         ]
     else:
         playlists = config.get("playlists", [])
+    if not any(
+        [
+            do_sync_playlists,
+            do_sync_roms,
+            do_sync_bios,
+            do_sync_thumbails,
+            do_update_playlists,
+        ]
+    ):
+        sys.exit(1)
 
     systems = {}
     for idx, playlist in enumerate(playlists):
