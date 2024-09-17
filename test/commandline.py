@@ -1,4 +1,3 @@
-import pytest
 import io
 import sys
 import os
