@@ -47,7 +47,6 @@ item_tpl = {
     "crc32": "00000000|crc",
     "db_name": "",
 }
-metadata_suffixes = [".cue", ".m3u"]
 
 current_system_progress = Progress(
     TimeElapsedColumn(),
@@ -175,26 +174,6 @@ def find_dat(local_rom_dir):
     return name_map
 
 
-def find_metadata(local_rom_dir):
-    files = glob.glob(str(local_rom_dir / "*"))
-    files.sort()
-    suffixes = defaultdict(int)
-    names = defaultdict(int)
-    for file in files:
-        suffixes[Path(file).suffix] += 1
-        names[Path(file).stem] += 1
-
-    # Are there any metadata files
-    # And do we have multiple files with the same stem?
-    match = False
-    for s in metadata_suffixes:
-        if s in suffixes.keys():
-            match = True
-    if match and max(list(set(names.values()))) >= 2:
-        return True
-    return False
-
-
 def update_playlist(default, playlist, dry_run):
     def make_item(file):
         stem = str(Path(file).stem)
@@ -226,7 +205,6 @@ def update_playlist(default, playlist, dry_run):
     whitelist = playlist.get("local_whitelist", False)
     blacklist = playlist.get("local_blacklist", False)
 
-    prefer_metadata_files = find_metadata(local_rom_dir)
     if playlist.get("local_create_m3u"):
         logger.debug("update_playlist: Create m3u files")
         m3u_pattern = playlist.get("local_m3u_pattern")
@@ -250,7 +228,7 @@ def update_playlist(default, playlist, dry_run):
                 logger.debug(f"update_playlist: Create  {m3u_file}")
                 for filename in sorted(files):
                     f.write(f"{filename}\n")
-    return
+
     name_map = find_dat(local_rom_dir)
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
@@ -288,10 +266,6 @@ def update_playlist(default, playlist, dry_run):
                 items.append(make_item(file))
         else:
             items.append(make_item(file))
-
-        # if prefer_metadata_files:
-        #    if Path(file).suffix not in metadata_suffixes:
-        #        continue
 
     items.append(make_item(file))
 
