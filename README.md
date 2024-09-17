@@ -73,8 +73,10 @@ core_name = "Atari - 7800 (ProSystem)"
 [[playlists]]
 name = "Sharp - X68000.lpl"
 local_folder = "Sharp - X68000"
-local_whitelist = '.*FD.*\.zip'
-local_blacklist = '.*HD.*\.zip'
+# Make sure to include all zip files matching the "FD" pattern
+local_whitelist = '.*FD.*\.zip$'
+# Exculde all files that hint hard dsik images
+local_blacklist = '.*HD.*\.zip$'
 remote_folder = "x68000"
 core_path = "px68k_libretro"
 core_name = "Sharp - X68000 (PX68k)"
@@ -83,10 +85,15 @@ disabled = false
 [[playlists]]
 name = "Commodore - Amiga.lpl"
 local_folder = "Commodore - Amiga"
+# Make sure to include all m3u list
 local_whitelist = '\.m3u$'
+# Don't add single adf images
 local_blacklist = '\.adf$'
+# Create fresh m3u files while updating playlists
 local_create_m3u = true
+# Only include adf images in m3u files
 local_m3u_whitelist = '\.adf$'
+# Normalizing pattern for files like "Agony (Disk 1 of 3).adf"
 local_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
 remote_folder = "amiga"
 core_path = "puae_libretro"
