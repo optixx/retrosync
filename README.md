@@ -34,11 +34,9 @@ make install
 
 ## Configuration
 
-By default, the `steamdeck.toml` configuration file is used. You can change the config file via the command switch `--config-file` to provide a different filename.
+ By default, the `steamdeck.toml` configuration file is employed. You can alter the configuration file by utilizing the command switch `--config-file` to specify an alternate filename.
 
-In this sample configuration, a setup is provided for the local desktop Retroarch-related files and your local ROM locations. The same goes for the remote side on your Steam Deck. The details may look a bit different on your Steam Deck, depending on how you installed Retroarch. In this case, Retroarch was installed via [Emudeck](https://www.emudeck.com/) using [Flatpak](https://flatpak.org/).
-
-
+In this sample configuration, a setup is provided for your local desktop's Retroarch-related files and your local ROM locations, as well as for the remote side on your Steam Deck. The appearance of these details may vary slightly on your Steam Deck, depending on how you installed Retroarch. For instance, in this scenario, Retroarch was installed through Emudeck (<https://www.emudeck.com/>) using Flatpak (<https://flatpak.org/>)).
 ```toml
 [default]
 hostname = "steamdeck"
@@ -103,44 +101,45 @@ disabled = false
 
 ![Usage](https://github.com/optixx/retrosync/raw/main/assets/img/usage.png)
 
-To sync all your playlists (that are configured in your TOML config file) and ROMs to your Steam Deck, just run:
+ To synchronize all your playlists (as defined in your TOML configuration file) and ROMs onto your Steam Deck, simply execute the following command:
 
 ```sh
 python retrosync.py --sync-roms --sync-playlists
 ```
 
-To see all the details of what is happening, you can add `--debug` to write detailed output to the `debug.log` file.
+ To view extensive information regarding current operations, include `--debug` in your command to generate detailed logs within a `debug.log` file.
 
 ```sh
 python retrosync.py --sync-roms --sync-playlists --debug
 ```
 
-To sync all local resources (playlists, ROMs, BIOS files, and thumbnails) to your Steam Deck:
+ To synchronize all local resources such as playlists, game ROMs, BIOS files, and thumbnails to your Steam Deck:
 
 ```sh
+
 python retrosync.py --all
 ```
 
-The actions for playlists and ROMs can be scoped to one system, like so:
+ Playlist and ROM actions can be limited to a single system, as follows:
 
 ```sh
 python retrosync.py --debug --sync-roms --sync-playlists --name "psx"
 Do you want to continue with playlists 'Sony - PlayStation.lpl'? [y/N]:
 ```
 
-You can add `--yes` to skip the prompt.
+ You have the option to include `--yes` in order to bypass the prompt.
 
 ```sh
 python retrosync.py --debug --sync-roms --sync-playlists --name "psx" --yes
 ```
 
-To update and re-create a local playlist by scanning the local ROM folder:
+ To refresh and recreate a local playlist by scanning your ROM folder:
 
 ```sh
 python retrosync.py --debug --update-playlists --name "psx"
 ```
 
-You can sync ROMs to a locally mounted SD card:
+ Synchronize your ROMs onto a locally attached SD card is possible:
 
 ```sh
 python retrosync.py --debug --sync-roms-local /Volumes/Steamdeck/roms
