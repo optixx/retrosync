@@ -11,3 +11,6 @@ pip:
 	uv pip install -r requirements.txt
 
 install: homebrew bootstrap pip
+
+run-tests:
+	pytest test/commandline.py -rP

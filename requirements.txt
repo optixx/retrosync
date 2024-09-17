@@ -3,3 +3,4 @@ click
 Levenshtein
 lxml
 rich
+pytest
