@@ -170,7 +170,16 @@ def find_dat(local_rom_dir):
         data = fd.read()
     root = etree.fromstring(data)
     for game in root.xpath("//game"):
-        name_map[game.attrib["name"]] = game.findtext("description")
+        description = game.findtext("description")
+        if description:
+            name_map[game.attrib["name"]] = description
+            break
+        if game.attrib.get("parent"):
+            continue
+        identity = game.findall("identity")
+        title = identity[0].findtext("title")
+        if title:
+            name_map[game.attrib["name"]] = title
     return name_map
 
 
