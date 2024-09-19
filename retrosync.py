@@ -173,7 +173,7 @@ def find_dat(local_rom_dir):
         description = game.findtext("description")
         if description:
             name_map[game.attrib["name"]] = description
-            break
+            continue
         if game.attrib.get("parent"):
             continue
         identity = game.findall("identity")
