@@ -25,7 +25,13 @@ def test_help():
 def test_prompt():
     try:
         run_cli_tool(
-            ["retrosync.py", "--dry-run", "--update-playlists", "--name='psx'"]
+            [
+                "retrosync.py",
+                "--dry-run",
+                "--update-playlists",
+                "--name=psx",
+                "--config-file=test.conf",
+            ]
         )
         assert False
     except OSError:
@@ -35,7 +41,14 @@ def test_prompt():
 def test_prompt_yes():
     try:
         run_cli_tool(
-            ["retrosync.py", "--dry-run", "--update-playlists", "--name='psx'", "--yes"]
+            [
+                "retrosync.py",
+                "--dry-run",
+                "--update-playlists",
+                "--name=psx",
+                "--yes",
+                "--config-file=test.conf",
+            ]
         )
         assert True
     except OSError:

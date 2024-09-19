@@ -228,7 +228,6 @@ def update_playlist(default, playlist, dry_run):
         data = json.load(file)
 
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    assert os.path.isdir(local_rom_dir)
 
     core_path = Path(default.get("local_cores")) / playlist.get("core_path")
     core_path = core_path.with_suffix(default.get("local_cores_suffix"))
@@ -301,7 +300,6 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
         .replace(default.get("local_cores"), default.get("remote_cores"))
     )
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    assert os.path.isdir(local_rom_dir)
     remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
     data["default_core_path"] = core_path
     data["scan_content_dir"] = str(remote_rom_dir)
@@ -319,7 +317,6 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
         logger.debug(
             f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}"
         )
-        assert os.path.isfile(local_path)
         new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
         new_item["path"] = new_path
         items.append(new_item)
@@ -327,7 +324,6 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
     data["items"] = items
     doc = json.dumps(data)
     logger.debug(json.dumps(data, indent=2))
-    assert str(local_rom_dir) not in doc
     temp_file.write(doc.encode("utf-8"))
     temp_file.flush()
     temp_file.seek(0)
@@ -354,10 +350,8 @@ def sync_roms(default, playlist, sync_roms_local, dry_run):
             "remote_folder"
         )
     else:
-        assert os.path.isdir(str(sync_roms_local))
         remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
 
-    assert os.path.isdir(local_rom_dir)
     if not sync_roms_local:
         cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
         execute(cmd, dry_run)
@@ -375,7 +369,6 @@ def sync_bios(default, dry_run):
     hostname = default.get("hostname")
     local_bios = Path(default.get("local_bios"))
     remote_bios = Path(default.get("remote_bios"))
-    assert os.path.isdir(local_bios)
     cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
 
@@ -385,7 +378,6 @@ def sync_thumbnails(default, dry_run):
     hostname = default.get("hostname")
     local_bios = Path(default.get("local_thumbnails"))
     remote_bios = Path(default.get("remote_thumbnails"))
-    assert os.path.isdir(local_bios)
     cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --delete "{local_bios}/" "{hostname}:{remote_bios}"'
     execute(cmd, dry_run)
 
