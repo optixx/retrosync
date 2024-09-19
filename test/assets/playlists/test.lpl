@@ -1,0 +1,420 @@
+{
+  "version": "1.5",
+  "default_core_path": "/Users/david/Library/Application Support/RetroArch/cores/stella_libretro.dylib",
+  "default_core_name": "Atari - 2600 (Stella)",
+  "base_content_directory": "\u0012/A\u001a?}?(?\u0012/A\u001e",
+  "label_display_mode": 0,
+  "right_thumbnail_mode": 0,
+  "left_thumbnail_mode": 0,
+  "thumbnail_match_mode": 0,
+  "sort_mode": 0,
+  "scan_content_dir": "/Users/david/Dropbox/Software/Roms/Atari - 2600",
+  "scan_file_exts": "",
+  "scan_dat_file_path": "",
+  "scan_search_recursively": true,
+  "scan_search_archives": true,
+  "scan_filter_dat_content": false,
+  "scan_overwrite_playlist": false,
+  "items": [
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Adventure (USA).zip",
+      "label": "Adventure (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Asteroids (Japan, USA).zip",
+      "label": "Asteroids (Japan, USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Atlantis (USA).zip",
+      "label": "Atlantis (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Battlezone (Japan, USA).zip",
+      "label": "Battlezone (Japan, USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Beamrider (USA).zip",
+      "label": "Beamrider (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Berzerk (Japan, USA).zip",
+      "label": "Berzerk (Japan, USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/California Games (USA).zip",
+      "label": "California Games (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Centipede (Japan, USA).zip",
+      "label": "Centipede (Japan, USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Chopper Command (USA).zip",
+      "label": "Chopper Command (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Circus Atari (Japan, USA).zip",
+      "label": "Circus Atari (Japan, USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Combat ~ Tank-Plus (USA).zip",
+      "label": "Combat ~ Tank-Plus (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Cosmic Ark (USA).zip",
+      "label": "Cosmic Ark (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Crystal Castles (USA).zip",
+      "label": "Crystal Castles (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Demon Attack (USA) (Rev 1).zip",
+      "label": "Demon Attack (USA) (Rev 1)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Dig Dug (USA).zip",
+      "label": "Dig Dug (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Dragonfire (USA).zip",
+      "label": "Dragonfire (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Enduro (USA).zip",
+      "label": "Enduro (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Frogger (USA).zip",
+      "label": "Frogger (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Frogs and Flies (USA).zip",
+      "label": "Frogs and Flies (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Frostbite (USA).zip",
+      "label": "Frostbite (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Gravitar (USA).zip",
+      "label": "Gravitar (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/H.E.R.O. (USA).zip",
+      "label": "H.E.R.O. (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Halloween (USA).zip",
+      "label": "Halloween (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Haunted House (USA).zip",
+      "label": "Haunted House (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Joust (USA).zip",
+      "label": "Joust (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Jungle Hunt (USA).zip",
+      "label": "Jungle Hunt (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Kaboom! (USA).zip",
+      "label": "Kaboom! (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Kangaroo (USA).zip",
+      "label": "Kangaroo (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Keystone Kapers (USA).zip",
+      "label": "Keystone Kapers (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Millipede (USA).zip",
+      "label": "Millipede (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Missile Command (USA).zip",
+      "label": "Missile Command (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Montezuma's Revenge - Featuring Panama Joe (USA).zip",
+      "label": "Montezuma's Revenge - Featuring Panama Joe (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Ms. Pac-Man (USA).zip",
+      "label": "Ms. Pac-Man (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Phoenix (USA).zip",
+      "label": "Phoenix (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Pitfall II - Lost Caverns (USA).zip",
+      "label": "Pitfall II - Lost Caverns (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Pitfall! - Pitfall Harry's Jungle Adventure (USA).zip",
+      "label": "Pitfall! - Pitfall Harry's Jungle Adventure (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/River Raid (USA).zip",
+      "label": "River Raid (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Seaquest (USA).zip",
+      "label": "Seaquest (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Sky Diver ~ Dare Diver (USA).zip",
+      "label": "Sky Diver ~ Dare Diver (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Solaris (USA).zip",
+      "label": "Solaris (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Space Invaders (USA).zip",
+      "label": "Space Invaders (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Stampede (USA).zip",
+      "label": "Stampede (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Star Wars - The Empire Strikes Back (USA).zip",
+      "label": "Star Wars - The Empire Strikes Back (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Stargate (USA).zip",
+      "label": "Stargate (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Super Breakout (USA).zip",
+      "label": "Super Breakout (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Tapper (USA).zip",
+      "label": "Tapper (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Vanguard (USA).zip",
+      "label": "Vanguard (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Video Pinball ~ Arcade Pinball (USA).zip",
+      "label": "Video Pinball ~ Arcade Pinball (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Warlords (USA).zip",
+      "label": "Warlords (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    },
+    {
+      "path": "/Users/david/Dropbox/Software/Roms/Atari - 2600/Yars' Revenge (USA).zip",
+      "label": "Yars' Revenge (USA)",
+      "core_path": "DETECT",
+      "core_name": "DETECT",
+      "crc32": "00000000|crc",
+      "db_name": "Atari - 2600.lpl"
+    }
+  ]
+}
