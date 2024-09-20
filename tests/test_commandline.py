@@ -33,7 +33,7 @@ def test_prompt():
                 "--config-file=test.conf",
             ]
         )
-        assert False
+        raise AssertionError()
     except OSError:
         assert True
 
@@ -52,4 +52,4 @@ def test_prompt_yes():
         )
         assert True
     except OSError:
-        assert False
+        raise AssertionError()

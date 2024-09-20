@@ -61,16 +61,12 @@ step_progress = Progress(
 )
 
 system_steps_progress = Progress(
-    TextColumn(
-        "[bold blue]Progress for system {task.fields[name]}: {task.percentage:.0f}%"
-    ),
+    TextColumn("[bold blue]Progress for system {task.fields[name]}: {task.percentage:.0f}%"),
     BarColumn(),
     TextColumn("({task.completed} of {task.total} steps done)"),
 )
 
-overall_progress = Progress(
-    TimeElapsedColumn(), BarColumn(), TextColumn("{task.description}")
-)
+overall_progress = Progress(TimeElapsedColumn(), BarColumn(), TextColumn("{task.description}"))
 
 progress_group = Group(
     Panel(Group(current_system_progress, step_progress, system_steps_progress)),
@@ -125,9 +121,7 @@ def execute(cmd, dry_run):
     logger.debug("execute: cmd=%s", cmd)
     if dry_run:
         return
-    p = subprocess.Popen(
-        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
     poll = select.poll()
     poll.register(p.stdout, select.POLLIN | select.POLLHUP)
     poll.register(p.stderr, select.POLLIN | select.POLLHUP)
@@ -166,7 +160,7 @@ def find_dat(local_rom_dir):
     if not len(files) == 1:
         return name_map
     dat_file = files.pop()
-    with open(dat_file, "r") as fd:
+    with open(dat_file) as fd:
         data = fd.read()
     root = etree.fromstring(data)
     for game in root.xpath("//game"):
@@ -200,12 +194,12 @@ def create_m3u(playlist, local_rom_dir, dry_run):
                 base_name = Path(filename).stem
             files[base_name].append(filename)
 
-    for base_name, files in files.items():
+    for base_name, list_files in files.items():
         m3u_file = os.path.join(local_rom_dir, f"{base_name}.m3u")
         if not dry_run:
             with open(m3u_file, "w") as f:
                 logger.debug(f"create_m3u: Create  {m3u_file}")
-                for filename in sorted(files):
+                for filename in sorted(list_files):
                     f.write(f"{filename}\n")
 
 
@@ -224,7 +218,7 @@ def update_playlist(default, playlist, dry_run):
     if not dry_run:
         backup_file(local)
 
-    with open(local, "r") as file:
+    with open(local) as file:
         data = json.load(file)
 
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
@@ -287,11 +281,11 @@ def update_playlist(default, playlist, dry_run):
             new_file.write(doc)
 
 
-def migrate_playlist(default, playlist, temp_file, dry_run):
+def migrate_playlist(default, playlist, temp_file, _dry_run):
     name = playlist.get("name")
     logger.debug(f"migrate_playlist: name={name}")
     local = Path(default.get("local_playlists")) / name
-    with open(local, "r") as file:
+    with open(local) as file:
         data = json.load(file)
 
     core_path = (
@@ -314,9 +308,7 @@ def migrate_playlist(default, playlist, temp_file, dry_run):
         new_item["core_path"] = "DETECT"
         local_path = new_item["path"].split("#")[0]
         local_name = os.path.basename(local_path)
-        logger.debug(
-            f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}"
-        )
+        logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
         new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
         new_item["path"] = new_path
         items.append(new_item)
@@ -346,9 +338,7 @@ def sync_roms(default, playlist, sync_roms_local, dry_run):
     hostname = default.get("hostname")
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
     if not sync_roms_local:
-        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get(
-            "remote_folder"
-        )
+        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
     else:
         remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
 
@@ -450,9 +440,7 @@ def expand_config(default):
     default="steamdeck.conf",
     help="Use config file",
 )
-@click.option(
-    "--dry-run", "-D", is_flag=True, help="Dry run, don't sync or create anything"
-)
+@click.option("--dry-run", "-D", is_flag=True, help="Dry run, don't sync or create anything")
 @click.option(
     "--debug",
     "-d",
@@ -507,9 +495,7 @@ def main(
     if system_name:
         system_name = match_system(system_name, playlists)
         if not yes:
-            if not click.confirm(
-                f"Do you want to continue with playlists '{system_name}' ?"
-            ):
+            if not click.confirm(f"Do you want to continue with playlists '{system_name}' ?"):
                 sys.exit(-1)
 
     jobs = {}
@@ -530,9 +516,7 @@ def main(
         system_step_actions["sync_roms"] = {"name": "Sync ROMs"}
 
     if system_name:
-        playlists = [
-            p for p in config.get("playlists", []) if p.get("name") == system_name
-        ]
+        playlists = [p for p in config.get("playlists", []) if p.get("name") == system_name]
     else:
         playlists = config.get("playlists", [])
     if not any(
@@ -547,7 +531,7 @@ def main(
         sys.exit(1)
 
     systems = {}
-    for idx, playlist in enumerate(playlists):
+    for _, playlist in enumerate(playlists):
         name = Path(playlist.get("name")).stem
         if not playlist.get("disabled", False):
             systems[name] = {"name": name, "playlist": playlist}
@@ -566,10 +550,8 @@ def main(
                 len(jobs),
             )
             overall_progress.update(overall_task_id, description=top_descr)
-            current_task_id = current_system_progress.add_task("Run job %s" % name)
-            system_steps_task_id = system_steps_progress.add_task(
-                "", total=2, name=name
-            )
+            current_task_id = current_system_progress.add_task(f"Run job {name}")
+            system_steps_task_id = system_steps_progress.add_task("", total=2, name=name)
             system_steps_progress.update(system_steps_task_id, advance=1)
             handler(default, dry_run)
             if dry_run:
@@ -578,13 +560,13 @@ def main(
             system_steps_progress.update(system_steps_task_id, visible=False)
             current_system_progress.stop_task(current_task_id)
             current_system_progress.update(
-                current_task_id, description="[bold green]%s synced!" % name
+                current_task_id, description=f"[bold green]{name} synced!"
             )
             overall_progress.update(overall_task_id, advance=1)
 
         overall_progress.update(
             overall_task_id,
-            description="[bold green]%s jobs processed, done!" % len(systems),
+            description=f"[bold green]{len(jobs)} jobs processed, done!",
         )
 
         for (
@@ -599,9 +581,7 @@ def main(
                 len(systems),
             )
             overall_progress.update(overall_task_id, description=top_descr)
-            current_task_id = current_system_progress.add_task(
-                "Syncing system %s" % name
-            )
+            current_task_id = current_system_progress.add_task(f"Syncing system {name}")
             system_steps_task_id = system_steps_progress.add_task(
                 "", total=len(system_step_actions), name=name
             )
@@ -632,13 +612,13 @@ def main(
             system_steps_progress.update(system_steps_task_id, visible=False)
             current_system_progress.stop_task(current_task_id)
             current_system_progress.update(
-                current_task_id, description="[bold green]%s synced!" % name
+                current_task_id, description=f"[bold green]{name} synced!"
             )
             overall_progress.update(overall_task_id, advance=1)
 
         overall_progress.update(
             overall_task_id,
-            description="[bold green]%s systems processed, done!" % len(systems),
+            description=f"[bold green]{len(systems)} systems processed, done!",
         )
 
 
