@@ -13,4 +13,4 @@ pip:
 install: homebrew bootstrap pip
 
 run-tests:
-	pytest test/ -rP
+	pytest tests/ -rP
