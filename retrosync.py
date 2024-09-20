@@ -182,25 +182,24 @@ def create_m3u(playlist, local_rom_dir, dry_run):
     m3u_pattern = playlist.get("local_m3u_pattern")
     m3u_whitelist = playlist.get("local_m3u_whitelist")
     files = defaultdict(list)
-    all_files = os.listdir(local_rom_dir)
-    all_files.sort()
-    for filename in all_files:
-        if re.compile(m3u_whitelist).search(filename):
+    all_files = Path(local_rom_dir)
+    for filename in all_files.iterdir():
+        if re.compile(m3u_whitelist).search(str(filename)):
             e = re.compile(m3u_pattern)
-            m = e.match(filename)
+            m = e.match(str(filename))
             if m:
                 base_name = m.groups()[0].strip()
             else:
-                base_name = Path(filename).stem
+                base_name = filename.stem
             files[base_name].append(filename)
-
+    print(files)
     for base_name, list_files in files.items():
-        m3u_file = os.path.join(local_rom_dir, f"{base_name}.m3u")
+        m3u_file = Path(local_rom_dir) / f"{base_name}.m3u"
         if not dry_run:
             with open(m3u_file, "w") as f:
-                logger.debug(f"create_m3u: Create  {m3u_file}")
+                logger.debug(f"create_m3u: Create  {str(m3u_file)}")
                 for filename in sorted(list_files):
-                    f.write(f"{filename}\n")
+                    f.write(f"{filename.name}\n")
 
 
 def update_playlist(default, playlist, dry_run):
