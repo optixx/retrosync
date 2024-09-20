@@ -6,7 +6,6 @@ __version__ = "0.1.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
-import os
 import subprocess
 import select
 import shutil
@@ -192,7 +191,6 @@ def create_m3u(playlist, local_rom_dir, dry_run):
             else:
                 base_name = filename.stem
             files[base_name].append(filename)
-    print(files)
     for base_name, list_files in files.items():
         m3u_file = Path(local_rom_dir) / f"{base_name}.m3u"
         if not dry_run:
@@ -306,7 +304,7 @@ def migrate_playlist(default, playlist, temp_file, _dry_run):
         new_item["core_name"] = "DETECT"
         new_item["core_path"] = "DETECT"
         local_path = new_item["path"].split("#")[0]
-        local_name = os.path.basename(local_path)
+        local_name = Path(local_path).name
         logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
         new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
         new_item["path"] = new_path
