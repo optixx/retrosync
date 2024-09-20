@@ -1,5 +1,5 @@
 [default]
-hostname = "steamdeck"
+hostname = "192.168.1.100"
 
 local_playlists = "~/Library/Application Support/RetroArch/playlists"
 local_bios = "~/Library/Application Support/RetroArch/system"
