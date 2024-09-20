@@ -1,6 +1,29 @@
-toml
-click
-Levenshtein
-lxml
-rich
-pytest
+asttokens==2.4.1 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+click==8.1.7 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+colorama==0.4.6 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0" and (platform_system == "Windows" or sys_platform == "win32")
+decorator==5.1.1 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+executing==2.1.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+iniconfig==2.0.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+ipython==8.27.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+jedi==0.19.1 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+levenshtein==0.26.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+lxml==5.3.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+markdown-it-py==3.0.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+matplotlib-inline==0.1.7 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+mdurl==0.1.2 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+packaging==24.1 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+parso==0.8.4 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+pexpect==4.9.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0" and (sys_platform != "win32" and sys_platform != "emscripten")
+pluggy==1.5.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+prompt-toolkit==3.0.47 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+ptyprocess==0.7.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0" and (sys_platform != "win32" and sys_platform != "emscripten")
+pure-eval==0.2.3 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+pygments==2.18.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+pytest==8.3.3 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+rapidfuzz==3.9.7 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+rich==13.8.1 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+six==1.16.0 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+stack-data==0.6.3 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+toml==0.10.2 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+traitlets==5.14.3 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
+wcwidth==0.2.13 ; python_full_version >= "3.12.0" and python_full_version < "4.0.0"
