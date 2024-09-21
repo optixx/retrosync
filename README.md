@@ -100,6 +100,14 @@ core_path = "puae_libretro"
 core_name = "Commodore - Amiga (PUAE)"
 disabled = false
 
+[[playlists]]
+name = "FBNeo - Arcade Games.lpl"
+local_folder = "SNK - Neo Geo"
+local_dat_file = "FinalBurnNeo.dat"
+remote_folder = "neogeo"
+core_path  = "fbneo_libretro"
+core_name = "Arcade (FinalBurn Neo)"
+
 ```
 
 ## Usage

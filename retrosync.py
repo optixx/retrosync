@@ -153,12 +153,11 @@ def backup_file(file_path):
     return str(backup_file)
 
 
-def find_dat(local_rom_dir):
+def build_file_map(local_rom_dir, dat_file):
     name_map = {}
-    files = glob.glob(str(local_rom_dir / "*.dat"))
-    if not len(files) == 1:
+    if not dat_file:
         return name_map
-    dat_file = files.pop()
+    dat_file = local_rom_dir / dat_file
     with open(dat_file) as fd:
         data = fd.read()
     root = etree.fromstring(data)
@@ -232,7 +231,7 @@ def update_playlist(default, playlist, dry_run):
 
     whitelist = playlist.get("local_whitelist", False)
     blacklist = playlist.get("local_blacklist", False)
-    name_map = find_dat(local_rom_dir)
+    name_map = build_file_map(local_rom_dir, playlist.get("local_dat_file", ""))
     items = []
     files = glob.glob(str(local_rom_dir / "*"))
     files.sort()
