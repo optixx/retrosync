@@ -6,6 +6,7 @@ __version__ = "0.1.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
+from os import lchmod
 import subprocess
 import select
 import shutil
@@ -20,6 +21,7 @@ import sys
 import platform
 import time
 import re
+import paramiko
 import Levenshtein
 from lxml import etree
 from pathlib import Path
@@ -33,6 +35,7 @@ from rich.progress import (
     SpinnerColumn,
     TextColumn,
     TimeElapsedColumn,
+    TimeRemainingColumn,
 )
 
 
@@ -73,11 +76,152 @@ progress_group = Group(
 )
 
 
+class Transport:
+    def __new__(cls, default, dry_run, force_transport):
+        if force_transport:
+            if force_transport == "unix":
+                return TransportUnix(default, dry_run)
+            elif force_transport == "windows":
+                return TransportWindows(default, dry_run)
+            else:
+                raise NotImplementedError
+
+        current_platform = platform.system()
+        if current_platform in ["Darwin", "Linux"]:
+            return TransportUnix(default, dry_run)
+        elif current_platform in ["Windows"]:
+            return TransportWindows(default, dry_run)
+        else:
+            raise NotImplementedError
+
+
+class TransportUnix:
+    def __init__(self, default, dry_run):
+        self.default = default
+        self.dry_run = dry_run
+        logger.debug(f"TransportUnix::__ctor__: dry_run={self.dry_run}")
+
+    def execute(self, cmd):
+        execute(cmd, self.dry_run)
+
+    def copy_file(self, local_filename: Path, remote_filename: Path):
+        hostname = self.default.get("hostname")
+        cmd = f'scp "{local_filename}" "{hostname}:{remote_filename}"'
+        self.execute(cmd)
+
+    def ensure_remote_dir_exists(self, remote_directory: Path):
+        hostname = self.default.get("hostname")
+        cmd = f"ssh {hostname} \"mkdir '{remote_directory}'\""
+        self.execute(cmd)
+
+    def copy_files(self, local_path: Path, remote_path: Path, whitelist: list):
+        hostname = self.default.get("hostname")
+        if whitelist:
+            includes = ""
+            for item in whitelist:
+                includes += f'--include="*{item}" '
+
+            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} --exclude="*" "{local_path}/" "{hostname}:{remote_path}"'
+        else:
+            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable "{local_path}/" "{hostname}:{remote_path}"'
+        self.execute(cmd)
+
+
+class TransportWindows:
+    def __init__(self, default, dry_run):
+        self.default = default
+        self.dry_run = dry_run
+        self.ssh = paramiko.SSHClient()
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.connected = False
+        logger.debug(f"TransportWindows::__ctor__: dry_run={self.dry_run}")
+
+    def connect(self):
+        if self.connected:
+            return
+        logger.debug("TransportWindows::connect start")
+        self.ssh.connect(
+            self.default.get("hostname"),
+            username=self.default.get("username"),
+            password=self.default.get("password"),
+        )
+        logger.debug("TransportWindows::connect connected")
+        self.sftp = self.ssh.open_sftp()
+        logger.debug("TransportWindows::connect sftp opened")
+        self.connected = True
+
+    def copy_file(self, local_filename: Path, remote_filename: Path):
+        self.connect()
+        try:
+            remote_file_attr = self.sftp.stat(str(remote_filename))
+            local_file_attr = local_filename.stat()
+            if remote_file_attr.st_mtime and int(local_file_attr.st_mtime) > int(
+                remote_file_attr.st_mtime
+            ):
+                if not self.dry_run:
+                    self.sftp.put(str(local_filename), str(remote_filename))
+                logger.debug(
+                    f"TransportWindows::copy_file: Uploaded newer file {local_filename} to {remote_filename}"
+                )
+        except FileNotFoundError:
+            if not self.dry_run:
+                self.sftp.put(str(local_filename), str(remote_filename))
+            logger.debug(
+                f"TransportWindows::copy_file: not found on remote. Uploaded  {local_filename} to {remote_filename}"
+            )
+
+    def ensure_remote_dir_exists(self, remote_directory: Path):
+        self.connect()
+        try:
+            self.sftp.stat(str(remote_directory))
+        except FileNotFoundError:
+            if not self.dry_run:
+                self.sftp.mkdir(str(remote_directory))
+            logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
+
+    def copy_files(self, local_path: Path, remote_path: Path, whitelist: list):
+        self.connect()
+        self.ensure_remote_dir_exists(remote_path)
+
+        for local_filename in local_path.iterdir():
+            remote_filename = remote_path / local_filename.name
+
+            if whitelist:
+                match = False
+                for item in whitelist:
+                    if local_filename.suffix == item:
+                        match = True
+                        break
+                if not match:
+                    logger.debug(
+                        f"TransportWindows::copy_files: not whitelist match {local_filename}"
+                    )
+                    continue
+
+            try:
+                remote_file_attr = self.sftp.stat(str(remote_filename))
+                local_file_attr = local_filename.stat()
+                if remote_file_attr.st_mtime and int(local_file_attr.st_mtime) > int(
+                    remote_file_attr.st_mtime
+                ):
+                    if not self.dry_run:
+                        self.sftp.put(str(local_filename), str(remote_filename))
+                    logger.debug(
+                        f"TransportWindows::copy_files: Uploaded newer file {local_filename} to {remote_filename}"
+                    )
+            except FileNotFoundError:
+                if not self.dry_run:
+                    self.sftp.put(str(local_filename), str(remote_filename))
+                logger.debug(
+                    f"TransportWindows::copy_files: not found on remote. Uploaded  {local_filename} to {remote_filename}"
+                )
+
+
 def check_platform():
     current_platform = platform.system()
-    if current_platform not in ["Darwin", "Linux"]:
+    if current_platform not in ["Darwin", "Linux", "Windows"]:
         print(
-            f"This script only runs on macOS or Linux, but you're using {current_platform}. Exiting..."
+            f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
         )
         sys.exit(1)
     else:
@@ -317,21 +461,15 @@ def migrate_playlist(default, playlist, temp_file, _dry_run):
     temp_file.seek(0)
 
 
-def copy_playlist(default, playlist, temp_file, dry_run):
+def copy_playlist(default, transport, playlist, temp_file):
     name = playlist.get("name")
     logger.debug(f"copy_playlist: name={name}")
-    hostname = default.get("hostname")
-    remote = Path(default.get("remote_playlists")) / name
-    cmd = f"ssh {hostname} \"cp -v '{remote}' '{remote}.bak'\""
-    execute(cmd, dry_run)
-    cmd = f'scp "{temp_file.name}" "{hostname}:{remote}"'
-    execute(cmd, dry_run)
+    transport.copy_file(Path(temp_file.name), Path(default.get("remote_playlists")) / name)
 
 
-def sync_roms(default, playlist, sync_roms_local, dry_run):
+def sync_roms(default, transport, playlist, sync_roms_local, dry_run):
     name = playlist.get("name")
     logger.debug(f"sync_roms: name={name}")
-    hostname = default.get("hostname")
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
     if not sync_roms_local:
         remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
@@ -339,10 +477,8 @@ def sync_roms(default, playlist, sync_roms_local, dry_run):
         remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
 
     if not sync_roms_local:
-        cmd = f"ssh {hostname} \"mkdir '{remote_rom_dir}'\""
-        execute(cmd, dry_run)
-        cmd = f'rsync --outbuf=L --recursive --progress --verbose --human-readable --size-only --ignore-times --delete --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{hostname}:{remote_rom_dir}"'
-        execute(cmd, dry_run)
+        transport.ensure_remote_dir_exists(remote_rom_dir)
+        transport.copy_files(local_rom_dir, remote_rom_dir)
     else:
         cmd = f"mkdir '{remote_rom_dir}'"
         execute(cmd, dry_run)
@@ -350,22 +486,20 @@ def sync_roms(default, playlist, sync_roms_local, dry_run):
         execute(cmd, dry_run)
 
 
-def sync_bios(default, dry_run):
+def sync_bios(default, transport):
     logger.info("sync_bios:")
-    hostname = default.get("hostname")
-    local_bios = Path(default.get("local_bios"))
-    remote_bios = Path(default.get("remote_bios"))
-    cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --include="*.zip" --include="*.bin" --include="*.img" --include="*.rom" --exclude="*" "{local_bios}/" "{hostname}:{remote_bios}"'
-    execute(cmd, dry_run)
+    transport.copy_files(
+        Path(default.get("local_bios")),
+        Path(default.get("remote_bios")),
+        [".zip", ".bin", ".img", ".rom"],
+    )
 
 
-def sync_thumbnails(default, dry_run):
+def sync_thumbnails(default, transport):
     logger.info("sync_thumbnails:")
-    hostname = default.get("hostname")
-    local_bios = Path(default.get("local_thumbnails"))
-    remote_bios = Path(default.get("remote_thumbnails"))
-    cmd = f'rsync --outbuf=L --progress --recursive --progress --verbose --human-readable --delete "{local_bios}/" "{hostname}:{remote_bios}"'
-    execute(cmd, dry_run)
+    transport.copy_files(
+        Path(default.get("local_thumbnails")), Path(default.get("remote_thumbnails")), []
+    )
 
 
 def expand_config(default):
@@ -444,6 +578,8 @@ def expand_config(default):
     is_flag=True,
     help="Enable debug logging to debug.log logfile",
 )
+@click.option("--transport-unix", "force_transport", flag_value="unix", default=False)
+@click.option("--transport-windows", "force_transport", flag_value="windows", default=False)
 @click.option("--yes", is_flag=True, help="Skip prompt inputs")
 def main(
     do_all,
@@ -457,6 +593,7 @@ def main(
     config_file,
     dry_run,
     do_debug,
+    force_transport,
     yes,
 ):
     global logger
@@ -526,6 +663,10 @@ def main(
     ):
         sys.exit(1)
 
+    print(force_transport)
+
+    transport = Transport(default, dry_run, force_transport)
+
     systems = {}
     for _, playlist in enumerate(playlists):
         name = Path(playlist.get("name")).stem
@@ -549,7 +690,7 @@ def main(
             current_task_id = current_system_progress.add_task(f"Run job {name}")
             system_steps_task_id = system_steps_progress.add_task("", total=2, name=name)
             system_steps_progress.update(system_steps_task_id, advance=1)
-            handler(default, dry_run)
+            handler(default, transport)
             if dry_run:
                 time.sleep(0.2)
             system_steps_progress.update(system_steps_task_id, advance=1)
@@ -564,58 +705,58 @@ def main(
             overall_task_id,
             description=f"[bold green]{len(jobs)} jobs processed, done!",
         )
-
-        for (
-            idx,
-            key,
-        ) in enumerate(systems.keys()):
-            name = systems[key]["name"]
-            playlist = systems[key]["playlist"]
-            logger.info("main: Process %s", playlist.get("name"))
-            top_descr = "[bold #AAAAAA](%d out of %d systems synced)" % (
+        if do_update_playlists or do_sync_playlists or do_sync_roms:
+            for (
                 idx,
-                len(systems),
-            )
-            overall_progress.update(overall_task_id, description=top_descr)
-            current_task_id = current_system_progress.add_task(f"Syncing system {name}")
-            system_steps_task_id = system_steps_progress.add_task(
-                "", total=len(system_step_actions), name=name
-            )
-            for action_key in system_step_actions:
-                action = system_step_actions[action_key]["name"]
-                step_task_id = step_progress.add_task("", action=action, name=name)
+                key,
+            ) in enumerate(systems.keys()):
+                name = systems[key]["name"]
+                playlist = systems[key]["playlist"]
+                logger.info("main: Process %s", playlist.get("name"))
+                top_descr = "[bold #AAAAAA](%d out of %d systems synced)" % (
+                    idx,
+                    len(systems),
+                )
+                overall_progress.update(overall_task_id, description=top_descr)
+                current_task_id = current_system_progress.add_task(f"Syncing system {name}")
+                system_steps_task_id = system_steps_progress.add_task(
+                    "", total=len(system_step_actions), name=name
+                )
+                for action_key in system_step_actions:
+                    action = system_step_actions[action_key]["name"]
+                    step_task_id = step_progress.add_task("", action=action, name=name)
+                    if dry_run:
+                        time.sleep(0.2)
+
+                    if do_update_playlists:
+                        update_playlist(default, playlist, dry_run)
+
+                    if do_sync_playlists:
+                        with tempfile.NamedTemporaryFile() as temp_file:
+                            migrate_playlist(default, playlist, temp_file, dry_run)
+                            copy_playlist(default, transport, playlist, temp_file)
+
+                    if do_sync_roms:
+                        sync_roms(default, transport, playlist, sync_roms_local, dry_run)
+
+                    step_progress.update(step_task_id, advance=1)
+                    step_progress.stop_task(step_task_id)
+                    step_progress.update(step_task_id, visible=False)
+                    system_steps_progress.update(system_steps_task_id, advance=1)
+
                 if dry_run:
                     time.sleep(0.2)
+                system_steps_progress.update(system_steps_task_id, visible=False)
+                current_system_progress.stop_task(current_task_id)
+                current_system_progress.update(
+                    current_task_id, description=f"[bold green]{name} synced!"
+                )
+                overall_progress.update(overall_task_id, advance=1)
 
-                if do_update_playlists:
-                    update_playlist(default, playlist, dry_run)
-
-                if do_sync_playlists:
-                    with tempfile.NamedTemporaryFile() as temp_file:
-                        migrate_playlist(default, playlist, temp_file, dry_run)
-                        copy_playlist(default, playlist, temp_file, dry_run)
-
-                if do_sync_roms:
-                    sync_roms(default, playlist, sync_roms_local, dry_run)
-
-                step_progress.update(step_task_id, advance=1)
-                step_progress.stop_task(step_task_id)
-                step_progress.update(step_task_id, visible=False)
-                system_steps_progress.update(system_steps_task_id, advance=1)
-
-            if dry_run:
-                time.sleep(0.2)
-            system_steps_progress.update(system_steps_task_id, visible=False)
-            current_system_progress.stop_task(current_task_id)
-            current_system_progress.update(
-                current_task_id, description=f"[bold green]{name} synced!"
+            overall_progress.update(
+                overall_task_id,
+                description=f"[bold green]{len(systems)} systems processed, done!",
             )
-            overall_progress.update(overall_task_id, advance=1)
-
-        overall_progress.update(
-            overall_task_id,
-            description=f"[bold green]{len(systems)} systems processed, done!",
-        )
 
 
 if __name__ == "__main__":
