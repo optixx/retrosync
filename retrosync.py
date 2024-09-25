@@ -124,6 +124,24 @@ class TransportUnix:
             cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable "{local_path}/" "{hostname}:{remote_path}"'
         self.execute(cmd)
 
+    def ensure_local_dir_exists(self, local_directory: Path):
+        cmd = f"mkdir '{local_directory}'"
+        self.execute(cmd)
+
+    def copy_local_files(
+        self, local_source_path: Path, local_destination_path: Path, whitelist: list
+    ):
+        self.ensure_local_dir_exists(local_destination_path)
+        if whitelist:
+            includes = ""
+            for item in whitelist:
+                includes += f'--include="*{item}" '
+
+            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} --exclude="*" "{local_source_path}/" "{local_destination_path}"'
+        else:
+            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable "{local_source_path}/" "{local_destination_path}"'
+        self.execute(cmd)
+
 
 class TransportWindows:
     def __init__(self, default, dry_run):
@@ -169,7 +187,6 @@ class TransportWindows:
             )
 
     def ensure_remote_dir_exists(self, remote_directory: Path):
-        self.connect()
         try:
             self.sftp.stat(str(remote_directory))
         except FileNotFoundError:
@@ -213,6 +230,14 @@ class TransportWindows:
                 logger.debug(
                     f"TransportWindows::copy_files: not found on remote. Uploaded  {local_filename} to {remote_filename}"
                 )
+
+    def ensure_local_dir_exists(self, local_directory: Path):
+        raise NotImplementedError
+
+    def copy_local_files(
+        self, local_source_path: Path, local_destination_path: Path, whitelist: list
+    ):
+        raise NotImplementedError
 
 
 def check_platform():
@@ -465,23 +490,16 @@ def copy_playlist(default, transport, playlist, temp_file):
     transport.copy_file(Path(temp_file.name), Path(default.get("remote_playlists")) / name)
 
 
-def sync_roms(default, transport, playlist, sync_roms_local, dry_run):
+def sync_roms(default, transport, playlist, sync_roms_local):
     name = playlist.get("name")
     logger.debug(f"sync_roms: name={name}")
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    if not sync_roms_local:
-        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
-    else:
+    if sync_roms_local:
         remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
-
-    if not sync_roms_local:
-        transport.ensure_remote_dir_exists(remote_rom_dir)
-        transport.copy_files(local_rom_dir, remote_rom_dir)
+        transport.copy_local_files(local_rom_dir, remote_rom_dir)
     else:
-        cmd = f"mkdir '{remote_rom_dir}'"
-        execute(cmd, dry_run)
-        cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable --size-only --ignore-times --delete --exclude="media" --exclude="*.txt" "{local_rom_dir}/" "{remote_rom_dir}"'
-        execute(cmd, dry_run)
+        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
+        transport.copy_files(local_rom_dir, remote_rom_dir)
 
 
 def sync_bios(default, transport):
@@ -736,7 +754,7 @@ def main(
                             copy_playlist(default, transport, playlist, temp_file)
 
                     if do_sync_roms:
-                        sync_roms(default, transport, playlist, sync_roms_local, dry_run)
+                        sync_roms(default, transport, playlist, sync_roms_local)
 
                     step_progress.update(step_task_id, advance=1)
                     step_progress.stop_task(step_task_id)
