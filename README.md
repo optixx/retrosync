@@ -22,7 +22,7 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 
 ## Compatibility
 
- Retrosync functions with macOS, Linux, and Windows, relying on previously installed tools such as Secure Shell (SSH) and Rsync, or utilizing pure Python Secure Shell implementations. This means that you need to enable SSH on your Steam Deck if you have not done so already; you can follow this guide for [instructions](https://shendrick.net/Gaming/2022/05/30/sshonsteamdeck.html)
+ Retrosync functions with macOS, Linux, and Windows, relying on previously installed tools such as Secure Shell (SSH) and Rsync, or utilizing pure Python Secure Shell implementations. This means that you need to enable SSH on your Steam Deck if you have not done so already; you can follow this guide for [instructions](https://shendrick.net/Gaming/2022/05/30/sshonsteamdeck.html).
 
 
 ## Installing

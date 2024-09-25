@@ -6,7 +6,6 @@ __version__ = "0.1.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
-from os import lchmod
 import subprocess
 import select
 import shutil
@@ -35,7 +34,6 @@ from rich.progress import (
     SpinnerColumn,
     TextColumn,
     TimeElapsedColumn,
-    TimeRemainingColumn,
 )
 
 
@@ -705,6 +703,7 @@ def main(
             overall_task_id,
             description=f"[bold green]{len(jobs)} jobs processed, done!",
         )
+
         if do_update_playlists or do_sync_playlists or do_sync_roms:
             for (
                 idx,
