@@ -569,7 +569,7 @@ def expand_config(default):
     "--sync-roms-local",
     "-l",
     default=None,
-    help="Sync ROMs to local path, to e.g sync to mounted SDcard)",
+    help="Sync ROMs to local path, to e.g sync to mounted SDcard. Only implemented for Unix transport",
 )
 @click.option(
     "--name",
@@ -593,9 +593,21 @@ def expand_config(default):
     is_flag=True,
     help="Enable debug logging to debug.log logfile",
 )
-@click.option("--transport-unix", "force_transport", flag_value="unix", default=False)
-@click.option("--transport-windows", "force_transport", flag_value="windows", default=False)
-@click.option("--yes", is_flag=True, help="Skip prompt inputs")
+@click.option(
+    "--transport-unix",
+    "force_transport",
+    flag_value="unix",
+    default=False,
+    help="Compel usage of scp and rsync command-line utilities (faster)",
+)
+@click.option(
+    "--transport-windows",
+    "force_transport",
+    flag_value="windows",
+    default=False,
+    help="Utilize Python's implementation of the SSH transport (slower)",
+)
+@click.option("--yes", is_flag=True, help="Skip prompt inputs by saying yes to everything")
 def main(
     do_all,
     do_sync_playlists,
