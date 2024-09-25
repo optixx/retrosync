@@ -152,6 +152,8 @@ class TransportWindows:
         logger.debug(f"TransportWindows::__ctor__: dry_run={self.dry_run}")
 
     def connect(self):
+        if self.dry_run:
+            return
         if self.connected:
             return
         logger.debug("TransportWindows::connect start")
@@ -167,68 +169,85 @@ class TransportWindows:
 
     def copy_file(self, local_filename: Path, remote_filename: Path):
         self.connect()
+        if self.dry_run:
+            logger.debug(
+                f"TransportWindows::copy_file: dry-run {local_filename} to {remote_filename}"
+            )
+            return
+
         try:
             remote_file_attr = self.sftp.stat(str(remote_filename))
             local_file_attr = local_filename.stat()
-            if remote_file_attr.st_mtime and int(local_file_attr.st_mtime) > int(
-                remote_file_attr.st_mtime
+            if (
+                int(local_file_attr.st_mtime) > int(remote_file_attr.st_mtime)
+                or local_file_attr.st_size != remote_file_attr.st_size
             ):
-                if not self.dry_run:
-                    self.sftp.put(str(local_filename), str(remote_filename))
+                self.sftp.put(str(local_filename), str(remote_filename))
                 logger.debug(
-                    f"TransportWindows::copy_file: Uploaded newer file {local_filename} to {remote_filename}"
+                    f"TransportWindows::copy_file: newer {local_filename} to {remote_filename}"
                 )
         except FileNotFoundError:
-            if not self.dry_run:
-                self.sftp.put(str(local_filename), str(remote_filename))
+            self.sftp.put(str(local_filename), str(remote_filename))
             logger.debug(
-                f"TransportWindows::copy_file: not found on remote. Uploaded  {local_filename} to {remote_filename}"
+                f"TransportWindows::copy_file: created {local_filename} to {remote_filename}"
             )
 
     def ensure_remote_dir_exists(self, remote_directory: Path):
+        if self.dry_run:
+            logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
+            return
+
         try:
             self.sftp.stat(str(remote_directory))
         except FileNotFoundError:
-            if not self.dry_run:
-                self.sftp.mkdir(str(remote_directory))
+            self.sftp.mkdir(str(remote_directory))
             logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
 
     def copy_files(self, local_path: Path, remote_path: Path, whitelist: list):
+        logger.debug(f"TransportWindows::copy_files: {local_path} -> {remote_path}")
         self.connect()
         self.ensure_remote_dir_exists(remote_path)
 
         for local_filename in local_path.iterdir():
             remote_filename = remote_path / local_filename.name
 
-            if whitelist:
-                match = False
-                for item in whitelist:
-                    if local_filename.suffix == item:
-                        match = True
-                        break
-                if not match:
+            if local_filename.is_dir():
+                self.copy_files(local_filename, remote_path, whitelist)
+            else:
+                if whitelist:
+                    match = False
+                    for item in whitelist:
+                        if local_filename.suffix == item:
+                            match = True
+                            break
+                    if not match:
+                        logger.debug(
+                            f"TransportWindows::copy_files: not whitelist match {local_filename}"
+                        )
+                        continue
+
+                if self.dry_run:
                     logger.debug(
-                        f"TransportWindows::copy_files: not whitelist match {local_filename}"
+                        f"TransportWindows::copy_files: dry-run {local_filename} to {remote_filename}"
                     )
                     continue
 
-            try:
-                remote_file_attr = self.sftp.stat(str(remote_filename))
-                local_file_attr = local_filename.stat()
-                if remote_file_attr.st_mtime and int(local_file_attr.st_mtime) > int(
-                    remote_file_attr.st_mtime
-                ):
-                    if not self.dry_run:
+                try:
+                    remote_file_attr = self.sftp.stat(str(remote_filename))
+                    local_file_attr = local_filename.stat()
+                    if (
+                        int(local_file_attr.st_mtime) > int(remote_file_attr.st_mtime)
+                        or local_file_attr.st_size != remote_file_attr.st_size
+                    ):
                         self.sftp.put(str(local_filename), str(remote_filename))
-                    logger.debug(
-                        f"TransportWindows::copy_files: Uploaded newer file {local_filename} to {remote_filename}"
-                    )
-            except FileNotFoundError:
-                if not self.dry_run:
+                        logger.debug(
+                            f"TransportWindows::copy_files: newer/size {local_filename} to {remote_filename}"
+                        )
+                except FileNotFoundError:
                     self.sftp.put(str(local_filename), str(remote_filename))
-                logger.debug(
-                    f"TransportWindows::copy_files: not found on remote. Uploaded  {local_filename} to {remote_filename}"
-                )
+                    logger.debug(
+                        f"TransportWindows::copy_files: create {local_filename} to {remote_filename}"
+                    )
 
     def ensure_local_dir_exists(self, local_directory: Path):
         raise NotImplementedError
@@ -495,10 +514,10 @@ def sync_roms(default, transport, playlist, sync_roms_local):
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
     if sync_roms_local:
         remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
-        transport.copy_local_files(local_rom_dir, remote_rom_dir)
+        transport.copy_local_files(local_rom_dir, remote_rom_dir, [])
     else:
         remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
-        transport.copy_files(local_rom_dir, remote_rom_dir)
+        transport.copy_files(local_rom_dir, remote_rom_dir, [])
 
 
 def sync_bios(default, transport):
