@@ -104,24 +104,25 @@ class TransportUnix:
 
     def copy_file(self, local_filename: Path, remote_filename: Path):
         hostname = self.default.get("hostname")
-        cmd = f'scp "{local_filename}" "{hostname}:{remote_filename}"'
+        username = self.default.get("username")
+        cmd = f'scp "{local_filename}" "{username}@{hostname}:{remote_filename}"'
         self.execute(cmd)
 
     def ensure_remote_dir_exists(self, remote_directory: Path):
         hostname = self.default.get("hostname")
-        cmd = f"ssh {hostname} \"mkdir '{remote_directory}'\""
+        username = self.default.get("username")
+        cmd = f"ssh {username}@{hostname} \"mkdir '{remote_directory}'\""
         self.execute(cmd)
 
     def copy_files(self, local_path: Path, remote_path: Path, whitelist: list):
         hostname = self.default.get("hostname")
+        username = self.default.get("username")
+        includes = ""
         if whitelist:
-            includes = ""
+            includes = '--exclude="*" '
             for item in whitelist:
                 includes += f'--include="*{item}" '
-
-            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} --exclude="*" "{local_path}/" "{hostname}:{remote_path}"'
-        else:
-            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable "{local_path}/" "{hostname}:{remote_path}"'
+        cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} "{local_path}/" "{username}@{hostname}:{remote_path}"'
         self.execute(cmd)
 
     def ensure_local_dir_exists(self, local_directory: Path):
@@ -132,14 +133,12 @@ class TransportUnix:
         self, local_source_path: Path, local_destination_path: Path, whitelist: list
     ):
         self.ensure_local_dir_exists(local_destination_path)
+        includes = ""
         if whitelist:
-            includes = ""
+            includes = '--exclude="*" '
             for item in whitelist:
                 includes += f'--include="*{item}" '
-
-            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} --exclude="*" "{local_source_path}/" "{local_destination_path}"'
-        else:
-            cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable "{local_source_path}/" "{local_destination_path}"'
+        cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} "{local_source_path}/" "{local_destination_path}"'
         self.execute(cmd)
 
 
