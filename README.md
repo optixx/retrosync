@@ -41,6 +41,8 @@ In this sample configuration, a setup is provided for your local desktop's Retro
 ```toml
 [default]
 hostname = "192.168.1.100"
+username = "deck"
+password =  "<password>"
 
 local_playlists = "~/Library/Application Support/RetroArch/playlists"
 local_bios = "~/Library/Application Support/RetroArch/system"
