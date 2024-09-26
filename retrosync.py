@@ -98,31 +98,74 @@ class TransportUnix:
         self.default = default
         self.dry_run = dry_run
         logger.debug(f"TransportUnix::__ctor__: dry_run={self.dry_run}")
+        self.check()
+
+    def check(self):
+        def check_executable_exists(executable_name):
+            executable_path = shutil.which(executable_name)
+            if not executable_path:
+                print(f"Executable '{executable_name}' not found.")
+                sys.exit(-1)
+
+        for command in ["ssh", "scp", "rsync", "sshpass"]:
+            check_executable_exists(command)
 
     def execute(self, cmd):
-        execute(cmd, self.dry_run)
+        password = self.default.get("password")
+        logger.debug("execute: cmd=%s", cmd.replace(password, "***"))
+        if self.dry_run:
+            return
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+        poll = select.poll()
+        poll.register(p.stdout, select.POLLIN | select.POLLHUP)
+        poll.register(p.stderr, select.POLLIN | select.POLLHUP)
+        pollc = 2
+        events = poll.poll()
+        while pollc > 0 and len(events) > 0:
+            for event in events:
+                (rfd, event) = event
+                if event & select.POLLIN:
+                    if rfd == p.stdout.fileno():
+                        lines = p.stdout.readlines()
+                        for line in lines:
+                            logger.debug("execute: stdout=%s", line)
+                    if rfd == p.stderr.fileno():
+                        line = p.stderr.readline()
+                        logger.debug("execute: stderr=%s", line)
+                if event & select.POLLHUP:
+                    poll.unregister(rfd)
+                    pollc = pollc - 1
+                if pollc > 0:
+                    events = poll.poll()
+        p.wait()
 
     def copy_file(self, local_filename: Path, remote_filename: Path):
         hostname = self.default.get("hostname")
         username = self.default.get("username")
-        cmd = f'scp "{local_filename}" "{username}@{hostname}:{remote_filename}"'
+        password = self.default.get("password")
+        cmd = f'sshpass -p "{password}" scp "{local_filename}" "{username}@{hostname}:{remote_filename}"'
         self.execute(cmd)
 
     def ensure_remote_dir_exists(self, remote_directory: Path):
         hostname = self.default.get("hostname")
         username = self.default.get("username")
-        cmd = f"ssh {username}@{hostname} \"mkdir '{remote_directory}'\""
+        password = self.default.get("password")
+        cmd = f'sshpass -p "{password}"  ssh {username}@{hostname} "mkdir \'{remote_directory}\'"'
         self.execute(cmd)
 
-    def copy_files(self, local_path: Path, remote_path: Path, whitelist: list):
+    def copy_files(
+        self, local_path: Path, remote_path: Path, whitelist: list, recursive: bool = False
+    ):
         hostname = self.default.get("hostname")
         username = self.default.get("username")
-        includes = ""
+        password = self.default.get("password")
+        args = ""
+        args += "--recursive "
         if whitelist:
-            includes = '--exclude="*" '
             for item in whitelist:
-                includes += f'--include="*{item}" '
-        cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} "{local_path}/" "{username}@{hostname}:{remote_path}"'
+                args += f'--include="*{item}" '
+            args += '--exclude="*" '
+        cmd = f'sshpass -p "{password}" rsync --outbuf=L --progress --verbose --human-readable {args} "{local_path}/" "{username}@{hostname}:{remote_path}"'
         self.execute(cmd)
 
     def ensure_local_dir_exists(self, local_directory: Path):
@@ -135,9 +178,9 @@ class TransportUnix:
         self.ensure_local_dir_exists(local_destination_path)
         includes = ""
         if whitelist:
-            includes = '--exclude="*" '
             for item in whitelist:
                 includes += f'--include="*{item}" '
+            includes += '--exclude="*" '
         cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} "{local_source_path}/" "{local_destination_path}"'
         self.execute(cmd)
 
@@ -193,6 +236,7 @@ class TransportWindows:
             )
 
     def ensure_remote_dir_exists(self, remote_directory: Path):
+        logger.debug(f"TransportWindows::ensure_remote_dir_exists: check {remote_directory}")
         if self.dry_run:
             logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
             return
@@ -203,7 +247,9 @@ class TransportWindows:
             self.sftp.mkdir(str(remote_directory))
             logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
 
-    def copy_files(self, local_path: Path, remote_path: Path, whitelist: list):
+    def copy_files(
+        self, local_path: Path, remote_path: Path, whitelist: list, recursive: bool = False
+    ):
         logger.debug(f"TransportWindows::copy_files: {local_path} -> {remote_path}")
         self.connect()
         self.ensure_remote_dir_exists(remote_path)
@@ -212,7 +258,12 @@ class TransportWindows:
             remote_filename = remote_path / local_filename.name
 
             if local_filename.is_dir():
-                self.copy_files(local_filename, remote_path, whitelist)
+                if recursive:
+                    self.copy_files(
+                        local_filename, remote_path / local_filename.name, whitelist, recursive
+                    )
+                else:
+                    continue
             else:
                 if whitelist:
                     match = False
@@ -269,13 +320,6 @@ def check_platform():
         print(f"Running on {current_platform}. Proceeding...")
 
 
-def check_executable_exists(executable_name):
-    executable_path = shutil.which(executable_name)
-    if not executable_path:
-        print(f"Executable '{executable_name}' not found.")
-        sys.exit(-1)
-
-
 def match_system(system_name, playlists):
     if system_name:
         dt1 = 1_000
@@ -299,35 +343,6 @@ def match_system(system_name, playlists):
             return dt1_name
         else:
             return dt2_name
-
-
-def execute(cmd, dry_run):
-    logger.debug("execute: cmd=%s", cmd)
-    if dry_run:
-        return
-    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
-    poll = select.poll()
-    poll.register(p.stdout, select.POLLIN | select.POLLHUP)
-    poll.register(p.stderr, select.POLLIN | select.POLLHUP)
-    pollc = 2
-    events = poll.poll()
-    while pollc > 0 and len(events) > 0:
-        for event in events:
-            (rfd, event) = event
-            if event & select.POLLIN:
-                if rfd == p.stdout.fileno():
-                    lines = p.stdout.readlines()
-                    for line in lines:
-                        logger.debug("execute: stdout=%s", line)
-                if rfd == p.stderr.fileno():
-                    line = p.stderr.readline()
-                    logger.debug("execute: stderr=%s", line)
-            if event & select.POLLHUP:
-                poll.unregister(rfd)
-                pollc = pollc - 1
-            if pollc > 0:
-                events = poll.poll()
-    p.wait()
 
 
 def backup_file(file_path):
@@ -525,14 +540,18 @@ def sync_bios(default, transport):
     transport.copy_files(
         Path(default.get("local_bios")),
         Path(default.get("remote_bios")),
-        [".zip", ".bin", ".img", ".rom"],
+        whitelist=[".zip", ".bin", ".img", ".rom", ".dat"],
+        recursive=False,
     )
 
 
 def sync_thumbnails(default, transport):
     logger.info("sync_thumbnails:")
     transport.copy_files(
-        Path(default.get("local_thumbnails")), Path(default.get("remote_thumbnails")), []
+        Path(default.get("local_thumbnails")),
+        Path(default.get("remote_thumbnails")),
+        whitelist=[],
+        recursive=True,
     )
 
 
@@ -659,9 +678,6 @@ def main(
         )
         logger = logging.getLogger()
         logger.disabled = True
-
-    for command in ["ssh", "scp", "rsync"]:
-        check_executable_exists(command)
 
     if do_all:
         do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_thumbails = (
