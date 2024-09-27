@@ -853,7 +853,9 @@ def main(
                             transport,
                             playlist,
                             sync_roms_local,
-                            lambda: system_steps_progress.update(system_steps_task_id, advance=1),
+                            lambda system_steps_task_id=system_steps_task_id: system_steps_progress.update(
+                                system_steps_task_id, advance=1
+                            ),
                         )
 
                     step_progress.update(step_task_id, advance=1)
