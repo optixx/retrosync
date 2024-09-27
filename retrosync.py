@@ -6,7 +6,6 @@ __version__ = "0.1.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
-import enum
 import subprocess
 import select
 import shutil
