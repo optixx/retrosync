@@ -6,6 +6,7 @@ __version__ = "0.1.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
+import enum
 import subprocess
 import select
 import shutil
@@ -93,7 +94,26 @@ class Transport:
             raise NotImplementedError
 
 
-class TransportUnix:
+class TransportBase:
+    def guess_file_count(self, local_path: Path, whitelist: list, recursive=False):
+        cnt = 0
+        if recursive:
+            generator = local_path.rglob("*")
+        else:
+            generator = local_path.glob("*")
+        for filename in generator:
+            if whitelist:
+                for item in whitelist:
+                    if filename.suffix == item:
+                        cnt += 1
+                        break
+            else:
+                cnt += 1
+
+        return cnt
+
+
+class TransportUnix(TransportBase):
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
@@ -154,18 +174,22 @@ class TransportUnix:
         self.execute(cmd)
 
     def copy_files(
-        self, local_path: Path, remote_path: Path, whitelist: list, recursive: bool = False
+        self,
+        local_path: Path,
+        remote_path: Path,
+        whitelist: list,
+        recursive: bool = False,
+        callback=None,
     ):
         hostname = self.default.get("hostname")
         username = self.default.get("username")
         password = self.default.get("password")
-        args = ""
-        args += "--recursive "
+        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only "
         if whitelist:
             for item in whitelist:
                 args += f'--include="*{item}" '
             args += '--exclude="*" '
-        cmd = f'sshpass -p "{password}" rsync --outbuf=L --progress --verbose --human-readable {args} "{local_path}/" "{username}@{hostname}:{remote_path}"'
+        cmd = f'sshpass -p "{password}" rsync {args} "{local_path}/" "{username}@{hostname}:{remote_path}"'
         self.execute(cmd)
 
     def ensure_local_dir_exists(self, local_directory: Path):
@@ -173,19 +197,22 @@ class TransportUnix:
         self.execute(cmd)
 
     def copy_local_files(
-        self, local_source_path: Path, local_destination_path: Path, whitelist: list
+        self,
+        local_source_path: Path,
+        local_destination_path: Path,
+        whitelist: list,
     ):
         self.ensure_local_dir_exists(local_destination_path)
-        includes = ""
+        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only "
         if whitelist:
             for item in whitelist:
-                includes += f'--include="*{item}" '
-            includes += '--exclude="*" '
-        cmd = f'rsync --outbuf=L --progress --recursive --verbose --human-readable {includes} "{local_source_path}/" "{local_destination_path}"'
+                args += f'--include="*{item}" '
+            args += '--exclude="*" '
+        cmd = f'rsync {args} "{local_source_path}/" "{local_destination_path}"'
         self.execute(cmd)
 
 
-class TransportWindows:
+class TransportWindows(TransportBase):
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
@@ -248,13 +275,25 @@ class TransportWindows:
             logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
 
     def copy_files(
-        self, local_path: Path, remote_path: Path, whitelist: list, recursive: bool = False
+        self,
+        local_path: Path,
+        remote_path: Path,
+        whitelist: list,
+        recursive: bool = False,
+        callback=None,
     ):
+        guessed_len = self.guess_file_count(local_path, whitelist, recursive)
         logger.debug(f"TransportWindows::copy_files: {local_path} -> {remote_path}")
         self.connect()
         self.ensure_remote_dir_exists(remote_path)
+        cnt = 1
 
-        for local_filename in local_path.iterdir():
+        for _, local_filename in enumerate(local_path.iterdir()):
+            logger.debug(
+                f"TransportWindows::copy_files: [{cnt}/{guessed_len}] {local_filename.name}"
+            )
+            if callback:
+                callback()
             remote_filename = remote_path / local_filename.name
 
             if local_filename.is_dir():
@@ -265,6 +304,7 @@ class TransportWindows:
                 else:
                     continue
             else:
+                cnt += 1
                 if whitelist:
                     match = False
                     for item in whitelist:
@@ -523,7 +563,12 @@ def copy_playlist(default, transport, playlist, temp_file):
     transport.copy_file(Path(temp_file.name), Path(default.get("remote_playlists")) / name)
 
 
-def sync_roms(default, transport, playlist, sync_roms_local):
+def sync_roms_guess_job_size(default, transport, playlist):
+    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
+    return transport.guess_file_count(local_rom_dir, [], True)
+
+
+def sync_roms(default, transport, playlist, sync_roms_local, callback):
     name = playlist.get("name")
     logger.debug(f"sync_roms: name={name}")
     local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
@@ -532,7 +577,9 @@ def sync_roms(default, transport, playlist, sync_roms_local):
         transport.copy_local_files(local_rom_dir, remote_rom_dir, [])
     else:
         remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
-        transport.copy_files(local_rom_dir, remote_rom_dir, [])
+        transport.copy_files(
+            local_rom_dir, remote_rom_dir, whitelist=[], recursive=True, callback=callback
+        )
 
 
 def sync_bios(default, transport):
@@ -725,8 +772,6 @@ def main(
     ):
         sys.exit(1)
 
-    print(force_transport)
-
     transport = Transport(default, dry_run, force_transport)
 
     systems = {}
@@ -782,8 +827,11 @@ def main(
                 )
                 overall_progress.update(overall_task_id, description=top_descr)
                 current_task_id = current_system_progress.add_task(f"Syncing system {name}")
+                steps_size = len(system_step_actions)
+                if do_sync_roms:
+                    steps_size += sync_roms_guess_job_size(default, transport, playlist)
                 system_steps_task_id = system_steps_progress.add_task(
-                    "", total=len(system_step_actions), name=name
+                    "", total=steps_size, name=name
                 )
                 for action_key in system_step_actions:
                     action = system_step_actions[action_key]["name"]
@@ -791,16 +839,22 @@ def main(
                     if dry_run:
                         time.sleep(0.2)
 
-                    if do_update_playlists:
+                    if do_update_playlists and action_key == "update_playlist":
                         update_playlist(default, playlist, dry_run)
 
-                    if do_sync_playlists:
+                    if do_sync_playlists and action_key == "sync_playlists":
                         with tempfile.NamedTemporaryFile() as temp_file:
                             migrate_playlist(default, playlist, temp_file, dry_run)
                             copy_playlist(default, transport, playlist, temp_file)
 
-                    if do_sync_roms:
-                        sync_roms(default, transport, playlist, sync_roms_local)
+                    if do_sync_roms and action_key == "sync_roms":
+                        sync_roms(
+                            default,
+                            transport,
+                            playlist,
+                            sync_roms_local,
+                            lambda: system_steps_progress.update(system_steps_task_id, advance=1),
+                        )
 
                     step_progress.update(step_task_id, advance=1)
                     step_progress.stop_task(step_task_id)
