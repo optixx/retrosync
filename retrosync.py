@@ -183,7 +183,7 @@ class TransportUnix(TransportBase):
         hostname = self.default.get("hostname")
         username = self.default.get("username")
         password = self.default.get("password")
-        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only "
+        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete"
         if whitelist:
             for item in whitelist:
                 args += f'--include="*{item}" '
@@ -586,8 +586,8 @@ def sync_bios(default, transport):
     transport.copy_files(
         Path(default.get("local_bios")),
         Path(default.get("remote_bios")),
-        whitelist=[".zip", ".bin", ".img", ".rom", ".dat"],
-        recursive=False,
+        whitelist=[],
+        recursive=True,
     )
 
 
