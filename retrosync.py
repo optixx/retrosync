@@ -602,15 +602,15 @@ def migrate_favorites(default, playlists, favorites_file, temp_file):
         remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
         local_path = new_item["path"].split("#")[0]
         local_name = Path(local_path).name
-        logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
-        new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
-        new_item["path"] = new_path
+        new_path = remote_rom_dir / local_name
+        new_item["path"] = str(new_path)
         core_path = (
             new_item["core_path"]
             .replace(default.get("local_cores_suffix"), default.get("remote_cores_suffix"))
             .replace(default.get("local_cores"), default.get("remote_cores"))
         )
         new_item["core_path"] = core_path
+        logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
         items.append(new_item)
 
     data["items"] = items
