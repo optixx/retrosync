@@ -598,7 +598,6 @@ def migrate_favorites(default, playlists, favorites_file, temp_file):
     for idx, item in enumerate(local_items):
         new_item = copy.copy(item)
         playlist = find_playlist(playlists, new_item["core_name"])
-        local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
         remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
         local_path = new_item["path"].split("#")[0]
         local_name = Path(local_path).name
