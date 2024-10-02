@@ -621,7 +621,7 @@ def migrate_favorites(default, playlists, favorites_file, temp_file):
     temp_file.seek(0)
 
 
-def sync_bios(default, playlists, transport):
+def sync_bios(default, _playlists, transport):
     logger.info("sync_bios:")
     transport.copy_files(
         Path(default.get("local_bios")),
@@ -645,7 +645,7 @@ def sync_favorites(default, playlists, transport):
         )
 
 
-def sync_thumbnails(default, playlists, transport):
+def sync_thumbnails(default, _playlists, transport):
     logger.info("sync_thumbnails:")
     transport.copy_files(
         Path(default.get("local_thumbnails")),
