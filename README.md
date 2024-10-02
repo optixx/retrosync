@@ -10,12 +10,13 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 1. Synchronize RetroArch playlists from Desktop to Steam Deck
 2. Synchronize ROM files and purge unused ROMs on the remote server
 3. Synchronize BIOS files
-4. Synchronize thumbnail images
-5. Recreate local playlists by scanning local folders
-6. Create local m3u files using detection and normalizing regular expressions
-7. Support for XML DAT archives
-8. Configure your cores according to each system
-9. Sync ROMs to a locally mounted SD card (or any other external storage)
+4. Synchronize RetroArch favorites from Desktop to Steam Deck
+5. Synchronize thumbnail images
+6. Recreate local playlists by scanning local folders
+7. Create local m3u files using detection and normalizing regular expressions
+8. Support for XML DAT archives
+9. Configure your cores according to each system
+10. Sync ROMs to a locally mounted SD card (or any other external storage)
 
 
 ![Demo](https://github.com/optixx/retrosync/raw/main/assets/img/demo.gif)
@@ -46,6 +47,7 @@ password =  "<password>"
 
 local_playlists = "~/Library/Application Support/RetroArch/playlists"
 local_bios = "~/Library/Application Support/RetroArch/system"
+local_config = "~/Library/Application Support/RetroArch/config/"
 local_roms = "~/Documents/Roms"
 local_cores = "~/Library/Application Support/RetroArch/cores"
 local_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
@@ -53,6 +55,7 @@ local_cores_suffix = ".dylib"
 
 remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
 remote_bios = "/home/deck/Emulation/bios"
+remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/config"
 remote_roms = "/home/deck/Emulation/roms"
 remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 remote_thumbnails = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/thumbnails"

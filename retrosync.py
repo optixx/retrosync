@@ -581,7 +581,47 @@ def sync_roms(default, transport, playlist, sync_roms_local, callback):
         )
 
 
-def sync_bios(default, transport):
+def migrate_favorites(default, playlists, favorites_file, temp_file):
+    def find_playlist(playlists, core_name):
+        for p in playlists:
+            if p.get("core_name") == core_name:
+                return p
+        return None
+
+    logger.debug(f"migrate_favorites: filename={favorites_file}")
+    with open(favorites_file) as file:
+        data = json.load(file)
+
+    items = []
+    local_items = data["items"]
+    local_items_len = len(local_items)
+    for idx, item in enumerate(local_items):
+        new_item = copy.copy(item)
+        playlist = find_playlist(playlists, new_item["core_name"])
+        local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
+        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
+        local_path = new_item["path"].split("#")[0]
+        local_name = Path(local_path).name
+        logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
+        new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
+        new_item["path"] = new_path
+        core_path = (
+            new_item["core_path"]
+            .replace(default.get("local_cores_suffix"), default.get("remote_cores_suffix"))
+            .replace(default.get("local_cores"), default.get("remote_cores"))
+        )
+        new_item["core_path"] = core_path
+        items.append(new_item)
+
+    data["items"] = items
+    doc = json.dumps(data)
+    logger.debug(json.dumps(data, indent=2))
+    temp_file.write(doc.encode("utf-8"))
+    temp_file.flush()
+    temp_file.seek(0)
+
+
+def sync_bios(default, playlists, transport):
     logger.info("sync_bios:")
     transport.copy_files(
         Path(default.get("local_bios")),
@@ -591,7 +631,21 @@ def sync_bios(default, transport):
     )
 
 
-def sync_thumbnails(default, transport):
+def sync_favorites(default, playlists, transport):
+    logger.info("sync_favorites:")
+    with tempfile.NamedTemporaryFile() as temp_file:
+        migrate_favorites(
+            default,
+            playlists,
+            Path(default.get("local_config")) / "content_favorites.lpl",
+            temp_file,
+        )
+        transport.copy_file(
+            Path(temp_file.name), Path(default.get("remote_config")) / "content_favorites.lpl"
+        )
+
+
+def sync_thumbnails(default, playlists, transport):
     logger.info("sync_thumbnails:")
     transport.copy_files(
         Path(default.get("local_thumbnails")),
@@ -605,11 +659,13 @@ def expand_config(default):
     for item in [
         "local_playlists",
         "local_bios",
+        "local_config",
         "local_roms",
         "local_cores",
         "local_thumbnails",
         "remote_playlists",
         "remote_bios",
+        "remote_config",
         "remote_roms",
         "remote_cores",
         "remote_thumbnails",
@@ -624,7 +680,7 @@ def expand_config(default):
     "-a",
     "do_all",
     is_flag=True,
-    help="Sync all files (ROMs, playlists, BIOS files and thumbnails)",
+    help="Sync all files (ROMs, playlists,favorites, BIOS files and thumbnails)",
 )
 @click.option(
     "--sync-playlists",
@@ -633,7 +689,16 @@ def expand_config(default):
     is_flag=True,
     help="Sync playlist files",
 )
-@click.option("--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync BIOS files")
+@click.option(
+    "--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync BIOS files to target system"
+)
+@click.option(
+    "--sync-favorites",
+    "-f",
+    "do_sync_favorites",
+    is_flag=True,
+    help="Sync sync favorites files  to target system",
+)
 @click.option(
     "--sync-thumbnails",
     "-t",
@@ -641,7 +706,9 @@ def expand_config(default):
     is_flag=True,
     help="Sync thumbnails files",
 )
-@click.option("--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync ROMs files")
+@click.option(
+    "--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync ROMs files to target system"
+)
 @click.option(
     "--update-playlists",
     "-u",
@@ -696,6 +763,7 @@ def main(
     do_all,
     do_sync_playlists,
     do_sync_bios,
+    do_sync_favorites,
     do_sync_thumbails,
     do_sync_roms,
     do_update_playlists,
@@ -726,7 +794,7 @@ def main(
         logger.disabled = True
 
     if do_all:
-        do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_thumbails = (
+        do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_favorites = do_sync_thumbails = (
             do_update_playlists
         ) = True
 
@@ -742,6 +810,9 @@ def main(
     jobs = {}
     if do_sync_bios:
         jobs["bios"] = {"name": "BIOS", "handler": "sync_bios"}
+
+    if do_sync_favorites:
+        jobs["favorites"] = {"name": "Favorites", "handler": "sync_favorites"}
 
     if do_sync_thumbails:
         jobs["thumbnails"] = {"name": "Thumbnails", "handler": "sync_thumbnails"}
@@ -765,6 +836,7 @@ def main(
             do_sync_playlists,
             do_sync_roms,
             do_sync_bios,
+            do_sync_favorites,
             do_sync_thumbails,
             do_update_playlists,
         ]
@@ -796,7 +868,7 @@ def main(
             current_task_id = current_system_progress.add_task(f"Run job {name}")
             system_steps_task_id = system_steps_progress.add_task("", total=2, name=name)
             system_steps_progress.update(system_steps_task_id, advance=1)
-            handler(default, transport)
+            handler(default, playlists, transport)
             if dry_run:
                 time.sleep(0.2)
             system_steps_progress.update(system_steps_task_id, advance=1)
