@@ -348,6 +348,103 @@ class TransportWindows(TransportBase):
         raise NotImplementedError
 
 
+class JobBase:
+    pass
+
+
+class GlobalJob(JobBase):
+    def __init__(self, default, playlists, transport):
+        self.default = default
+        self.playlists = playlists
+        self.transport = transport
+        self.size = 1
+        self.setup()
+
+    def setup(self):
+        pass
+
+
+class BiosSync(GlobalJob):
+    name = "BIOS"
+
+    def setup(self):
+        self.src = Path(self.default.get("local_bios"))
+        self.dst = Path(self.default.get("remote_bios"))
+        self.size = self.transport.guess_file_count(self.src, [], True)
+
+    def do(self):
+        self.transport.copy_files(
+            self.src,
+            self.dst,
+            whitelist=[],
+            recursive=True,
+        )
+
+
+class ThumbnailsSync(BiosSync):
+    name = "Thumbnails"
+
+    def setup(self):
+        self.src = Path(self.default.get("local_thumbnails"))
+        self.dst = Path(self.default.get("remote_thumbnails"))
+        self.size = self.transport.guess_file_count(self.src, [], True)
+
+
+class FavoritesSync(BiosSync):
+    name = "Favorites"
+
+    def do(self):
+        with tempfile.NamedTemporaryFile() as temp_file:
+            self.migrate(
+                Path(self.default.get("local_config")) / "content_favorites.lpl",
+                temp_file,
+            )
+            self.transport.copy_file(
+                Path(temp_file.name),
+                Path(self.default.get("remote_config")) / "content_favorites.lpl",
+            )
+
+    def migrate(self, favorites_file, temp_file):
+        def find_playlist(playlists, core_name):
+            for p in playlists:
+                if p.get("core_name") == core_name:
+                    return p
+            return None
+
+        logger.debug(f"migrate: filename={favorites_file}")
+        with open(favorites_file) as file:
+            data = json.load(file)
+
+        items = []
+        local_items = data["items"]
+        local_items_len = len(local_items)
+        for idx, item in enumerate(local_items):
+            new_item = copy.copy(item)
+            playlist = find_playlist(self.playlists, new_item["core_name"])
+            remote_rom_dir = Path(self.default.get("remote_roms")) / playlist.get("remote_folder")
+            local_path = new_item["path"].split("#")[0]
+            local_name = Path(local_path).name
+            new_path = remote_rom_dir / local_name
+            new_item["path"] = str(new_path)
+            core_path = (
+                new_item["core_path"]
+                .replace(
+                    self.default.get("local_cores_suffix"), self.default.get("remote_cores_suffix")
+                )
+                .replace(self.default.get("local_cores"), self.default.get("remote_cores"))
+            )
+            new_item["core_path"] = core_path
+            logger.debug(f"migrate: Convert [{idx+1}/{local_items_len}] path={local_name}")
+            items.append(new_item)
+
+        data["items"] = items
+        doc = json.dumps(data)
+        logger.debug(json.dumps(data, indent=2))
+        temp_file.write(doc.encode("utf-8"))
+        temp_file.flush()
+        temp_file.seek(0)
+
+
 def check_platform():
     current_platform = platform.system()
     if current_platform not in ["Darwin", "Linux", "Windows"]:
@@ -581,79 +678,6 @@ def sync_roms(default, transport, playlist, sync_roms_local, callback):
         )
 
 
-def migrate_favorites(default, playlists, favorites_file, temp_file):
-    def find_playlist(playlists, core_name):
-        for p in playlists:
-            if p.get("core_name") == core_name:
-                return p
-        return None
-
-    logger.debug(f"migrate_favorites: filename={favorites_file}")
-    with open(favorites_file) as file:
-        data = json.load(file)
-
-    items = []
-    local_items = data["items"]
-    local_items_len = len(local_items)
-    for idx, item in enumerate(local_items):
-        new_item = copy.copy(item)
-        playlist = find_playlist(playlists, new_item["core_name"])
-        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
-        local_path = new_item["path"].split("#")[0]
-        local_name = Path(local_path).name
-        new_path = remote_rom_dir / local_name
-        new_item["path"] = str(new_path)
-        core_path = (
-            new_item["core_path"]
-            .replace(default.get("local_cores_suffix"), default.get("remote_cores_suffix"))
-            .replace(default.get("local_cores"), default.get("remote_cores"))
-        )
-        new_item["core_path"] = core_path
-        logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
-        items.append(new_item)
-
-    data["items"] = items
-    doc = json.dumps(data)
-    logger.debug(json.dumps(data, indent=2))
-    temp_file.write(doc.encode("utf-8"))
-    temp_file.flush()
-    temp_file.seek(0)
-
-
-def sync_bios(default, _playlists, transport):
-    logger.info("sync_bios:")
-    transport.copy_files(
-        Path(default.get("local_bios")),
-        Path(default.get("remote_bios")),
-        whitelist=[],
-        recursive=True,
-    )
-
-
-def sync_favorites(default, playlists, transport):
-    logger.info("sync_favorites:")
-    with tempfile.NamedTemporaryFile() as temp_file:
-        migrate_favorites(
-            default,
-            playlists,
-            Path(default.get("local_config")) / "content_favorites.lpl",
-            temp_file,
-        )
-        transport.copy_file(
-            Path(temp_file.name), Path(default.get("remote_config")) / "content_favorites.lpl"
-        )
-
-
-def sync_thumbnails(default, _playlists, transport):
-    logger.info("sync_thumbnails:")
-    transport.copy_files(
-        Path(default.get("local_thumbnails")),
-        Path(default.get("remote_thumbnails")),
-        whitelist=[],
-        recursive=True,
-    )
-
-
 def expand_config(default):
     for item in [
         "local_playlists",
@@ -806,15 +830,16 @@ def main(
             if not click.confirm(f"Do you want to continue with playlists '{system_name}' ?"):
                 sys.exit(-1)
 
-    jobs = {}
+    jobs = []
+    transport = Transport(default, dry_run, force_transport)
     if do_sync_bios:
-        jobs["bios"] = {"name": "BIOS", "handler": "sync_bios"}
+        jobs.append(BiosSync(default, playlists, transport))
 
     if do_sync_favorites:
-        jobs["favorites"] = {"name": "Favorites", "handler": "sync_favorites"}
+        jobs.append(FavoritesSync(default, playlists, transport))
 
     if do_sync_thumbails:
-        jobs["thumbnails"] = {"name": "Thumbnails", "handler": "sync_thumbnails"}
+        jobs.append(ThumbnailsSync(default, playlists, transport))
 
     system_step_actions = {}
     if do_update_playlists:
@@ -842,39 +867,35 @@ def main(
     ):
         sys.exit(1)
 
-    transport = Transport(default, dry_run, force_transport)
-
     systems = {}
     for _, playlist in enumerate(playlists):
         name = Path(playlist.get("name")).stem
         if not playlist.get("disabled", False):
             systems[name] = {"name": name, "playlist": playlist}
 
-    overall_task_id = overall_progress.add_task("", total=len(jobs) + len(systems))
-
+    jobs_len = sum([j.size for j in jobs])
+    overall_task_id = overall_progress.add_task("", total=jobs_len + len(systems))
     with Live(progress_group):
         for (
             idx,
-            key,
-        ) in enumerate(jobs.keys()):
-            name = jobs[key]["name"]
-            handler = globals()[jobs[key]["handler"]]
+            job,
+        ) in enumerate(jobs):
             top_descr = "[bold #AAAAAA](%d out of %d jobs done)" % (
                 idx,
                 len(jobs),
             )
             overall_progress.update(overall_task_id, description=top_descr)
-            current_task_id = current_system_progress.add_task(f"Run job {name}")
-            system_steps_task_id = system_steps_progress.add_task("", total=2, name=name)
+            current_task_id = current_system_progress.add_task(f"Run job {job.name}")
+            system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
             system_steps_progress.update(system_steps_task_id, advance=1)
-            handler(default, playlists, transport)
+            job.do()
             if dry_run:
                 time.sleep(0.2)
             system_steps_progress.update(system_steps_task_id, advance=1)
             system_steps_progress.update(system_steps_task_id, visible=False)
             current_system_progress.stop_task(current_task_id)
             current_system_progress.update(
-                current_task_id, description=f"[bold green]{name} synced!"
+                current_task_id, description=f"[bold green]{job.name} synced!"
             )
             overall_progress.update(overall_task_id, advance=1)
 

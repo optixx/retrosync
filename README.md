@@ -41,6 +41,7 @@ make install
 In this sample configuration, a setup is provided for your local desktop's Retroarch-related files and your local ROM locations, as well as for the remote side on your Steam Deck. The appearance of these details may vary slightly on your Steam Deck, depending on how you installed Retroarch. For instance, in this scenario, Retroarch was installed through Emudeck (<https://www.emudeck.com/>) using Flatpak (<https://flatpak.org/>)).
 ```toml
 [default]
+target = "remote"
 hostname = "192.168.1.100"
 username = "deck"
 password =  "<password>"
