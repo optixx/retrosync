@@ -191,25 +191,6 @@ class TransportUnix(TransportBase):
         cmd = f'sshpass -p "{password}" rsync {args} "{local_path}/" "{username}@{hostname}:{remote_path}"'
         self.execute(cmd)
 
-    def ensure_local_dir_exists(self, local_directory: Path):
-        cmd = f"mkdir '{local_directory}'"
-        self.execute(cmd)
-
-    def copy_local_files(
-        self,
-        local_source_path: Path,
-        local_destination_path: Path,
-        whitelist: list,
-    ):
-        self.ensure_local_dir_exists(local_destination_path)
-        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only "
-        if whitelist:
-            for item in whitelist:
-                args += f'--include="*{item}" '
-            args += '--exclude="*" '
-        cmd = f'rsync {args} "{local_source_path}/" "{local_destination_path}"'
-        self.execute(cmd)
-
 
 class TransportWindows(TransportBase):
     def __init__(self, default, dry_run):
@@ -338,14 +319,6 @@ class TransportWindows(TransportBase):
                     logger.debug(
                         f"TransportWindows::copy_files: create {local_filename} to {remote_filename}"
                     )
-
-    def ensure_local_dir_exists(self, local_directory: Path):
-        raise NotImplementedError
-
-    def copy_local_files(
-        self, local_source_path: Path, local_destination_path: Path, whitelist: list
-    ):
-        raise NotImplementedError
 
 
 class JobBase:
@@ -758,12 +731,6 @@ def expand_config(default):
     help="Update local playlist files by scanning the ROM directories for results",
 )
 @click.option(
-    "--sync-roms-local",
-    "-l",
-    default=None,
-    help="Sync ROMs to local path, to e.g sync to mounted SDcard. Only implemented for Unix transport",
-)
-@click.option(
     "--name",
     "-n",
     "system_name",
@@ -808,7 +775,6 @@ def main(
     do_sync_thumbails,
     do_sync_roms,
     do_update_playlists,
-    sync_roms_local,
     system_name,
     config_file,
     dry_run,
