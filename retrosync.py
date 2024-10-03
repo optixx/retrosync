@@ -409,7 +409,7 @@ class FavoritesSync(BiosSync):
             for p in playlists:
                 if p.get("core_name") == core_name:
                     return p
-            return None
+            raise AssertionError()
 
         logger.debug(f"migrate: filename={favorites_file}")
         with open(favorites_file) as file:
@@ -443,6 +443,221 @@ class FavoritesSync(BiosSync):
         temp_file.write(doc.encode("utf-8"))
         temp_file.flush()
         temp_file.seek(0)
+
+
+class SystemJob(JobBase):
+    def __init__(self, default, transport):
+        self.default = default
+        self.transport = transport
+        self.size = 1
+
+
+class RomSyncJob(SystemJob):
+    name = "Sync ROMs"
+
+    def setup(self, playlist):
+        self.playlist = playlist
+        self.src = Path(self.default.get("local_roms")) / self.playlist.get("local_folder")
+        self.dst = Path(self.default.get("remote_roms")) / self.playlist.get("remote_folder")
+        self.size = self.transport.guess_file_count(self.src, [], True)
+
+    def do(self, callback):
+        self.transport.copy_files(
+            self.src, self.dst, whitelist=[], recursive=True, callback=callback
+        )
+
+
+class PlaylistSyncJob(SystemJob):
+    name = "Sync Playlist"
+
+    def setup(self, playlist):
+        self.playlist = playlist
+        self.size = 1
+
+    def migrate_playlist(self, temp_file):
+        name = self.playlist.get("name")
+        logger.debug(f"migrate_playlist: name={name}")
+        local = Path(self.default.get("local_playlists")) / name
+        with open(local) as file:
+            data = json.load(file)
+
+        core_path = (
+            data["default_core_path"]
+            .replace(
+                self.default.get("local_cores_suffix"), self.default.get("remote_cores_suffix")
+            )
+            .replace(self.default.get("local_cores"), self.default.get("remote_cores"))
+        )
+        local_rom_dir = Path(self.default.get("local_roms")) / self.playlist.get("local_folder")
+        remote_rom_dir = Path(self.default.get("remote_roms")) / self.playlist.get("remote_folder")
+        data["default_core_path"] = core_path
+        data["scan_content_dir"] = str(remote_rom_dir)
+        data["scan_dat_file_path"] = ""
+
+        items = []
+        local_items = data["items"]
+        local_items_len = len(local_items)
+        for idx, item in enumerate(local_items):
+            new_item = copy.copy(item)
+            new_item["core_name"] = "DETECT"
+            new_item["core_path"] = "DETECT"
+            local_path = new_item["path"].split("#")[0]
+            local_name = Path(local_path).name
+            logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
+            new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
+            new_item["path"] = new_path
+            items.append(new_item)
+
+        data["items"] = items
+        doc = json.dumps(data)
+        logger.debug(json.dumps(data, indent=2))
+        temp_file.write(doc.encode("utf-8"))
+        temp_file.flush()
+        temp_file.seek(0)
+
+    def do(self, _callback):
+        name = self.playlist.get("name")
+        with tempfile.NamedTemporaryFile() as temp_file:
+            self.migrate_playlist(temp_file)
+            self.transport.copy_file(
+                Path(temp_file.name), Path(self.default.get("remote_playlists")) / name
+            )
+
+
+class PlaylistUpdatecJob(SystemJob):
+    name = "Update Playlist"
+
+    def setup(self, playlist):
+        self.playlist = playlist
+        self.size = 1
+
+    def backup_file(self, file_path):
+        original_file = Path(file_path)
+        backup_file = original_file.with_suffix(original_file.suffix + ".backup")
+        backup_file.write_bytes(original_file.read_bytes())
+        logger.debug(f"backup_file: created {backup_file}")
+        return str(backup_file)
+
+    def make_item(self, local, file):
+        stem = str(Path(file).stem)
+        new_item = copy.copy(item_tpl)
+        new_item["path"] = file
+        new_item["label"] = self.name_map.get(stem, stem)
+        new_item["db_name"] = local.name
+        return new_item
+
+    def create_m3u(self, local_rom_dir):
+        logger.debug("create_m3u: Create m3u files")
+        m3u_pattern = self.playlist.get("local_m3u_pattern")
+        m3u_whitelist = self.playlist.get("local_m3u_whitelist")
+        files = defaultdict(list)
+        all_files = Path(local_rom_dir)
+        for filename in all_files.iterdir():
+            if re.compile(m3u_whitelist).search(str(filename)):
+                e = re.compile(m3u_pattern)
+                m = e.match(str(filename))
+                if m:
+                    base_name = m.groups()[0].strip()
+                else:
+                    base_name = filename.stem
+                files[base_name].append(filename)
+        for base_name, list_files in files.items():
+            m3u_file = Path(local_rom_dir) / f"{base_name}.m3u"
+            if not self.transport.dry_run:
+                with open(m3u_file, "w") as f:
+                    logger.debug(f"create_m3u: Create  {str(m3u_file)}")
+                    for filename in sorted(list_files):
+                        f.write(f"{filename.name}\n")
+
+    def build_file_map(self, local_rom_dir, dat_file):
+        name_map = {}
+        if not dat_file:
+            return name_map
+        dat_file = local_rom_dir / dat_file
+        with open(dat_file) as fd:
+            data = fd.read()
+        root = etree.fromstring(data)
+        for game in root.xpath("//game"):
+            description = game.findtext("description")
+            if description:
+                name_map[game.attrib["name"]] = description
+                continue
+            if game.attrib.get("parent"):
+                continue
+            identity = game.findall("identity")
+            title = identity[0].findtext("title")
+            if title:
+                name_map[game.attrib["name"]] = title
+        return name_map
+
+    def do(self, _callback):
+        name = self.playlist.get("name")
+        logger.debug(f"migrate_playlist: name={name}")
+        local = Path(self.default.get("local_playlists")) / name
+        if not self.transport.dry_run:
+            self.backup_file(local)
+
+        with open(local) as file:
+            data = json.load(file)
+
+        local_rom_dir = Path(self.default.get("local_roms")) / self.playlist.get("local_folder")
+
+        core_path = Path(self.default.get("local_cores")) / self.playlist.get("core_path")
+        core_path = core_path.with_suffix(self.default.get("local_cores_suffix"))
+        data["default_core_path"] = str(core_path)
+        data["default_core_name"] = self.playlist.get("core_name")
+        data["scan_content_dir"] = str(local_rom_dir)
+        data["scan_dat_file_path"] = str(local_rom_dir)
+
+        if self.playlist.get("local_create_m3u"):
+            self.create_m3u(local_rom_dir)
+
+        whitelist = self.playlist.get("local_whitelist", False)
+        blacklist = self.playlist.get("local_blacklist", False)
+        self.name_map = self.build_file_map(local_rom_dir, self.playlist.get("local_dat_file", ""))
+        items = []
+        files = glob.glob(str(local_rom_dir / "*"))
+        files.sort()
+        files_len = len(files)
+
+        file_list = []
+        # First Pass
+        for idx, file in enumerate(files):
+            logger.debug(
+                f"update_playlist: Update first pass [{idx+1}/{files_len}] path={Path(file).name}"
+            )
+            if Path(file).is_dir():
+                subs = glob.glob(str(Path(file) / "*"))
+                for sub in subs:
+                    file_list.append(sub)
+            else:
+                file_list.append(file)
+
+        # Second Pass
+        files_len = len(file_list)
+        for idx, file in enumerate(file_list):
+            logger.debug(
+                f"update_playlist: Update second pass [{idx+1}/{files_len}] path={Path(file).name}"
+            )
+
+            if blacklist:
+                if re.compile(blacklist).search(file):
+                    logger.debug(f"update_playlist: Skip {Path(file).name} is blacklisted")
+                    continue
+
+            if whitelist:
+                if re.compile(whitelist).search(file):
+                    logger.debug(f"update_playlist: Add {Path(file).name} is whitelisted")
+                    items.append(self.make_item(local, file))
+            else:
+                items.append(self.make_item(local, file))
+
+        data["items"] = items
+        doc = json.dumps(data, indent=2)
+        logger.debug(json.dumps(data, indent=2))
+        if not self.transport.dry_run:
+            with open(str(local), "w") as new_file:
+                new_file.write(doc)
 
 
 def check_platform():
@@ -479,203 +694,6 @@ def match_system(system_name, playlists):
             return dt1_name
         else:
             return dt2_name
-
-
-def backup_file(file_path):
-    original_file = Path(file_path)
-    backup_file = original_file.with_suffix(original_file.suffix + ".backup")
-    backup_file.write_bytes(original_file.read_bytes())
-    logger.debug(f"backup_file: created {backup_file}")
-    return str(backup_file)
-
-
-def build_file_map(local_rom_dir, dat_file):
-    name_map = {}
-    if not dat_file:
-        return name_map
-    dat_file = local_rom_dir / dat_file
-    with open(dat_file) as fd:
-        data = fd.read()
-    root = etree.fromstring(data)
-    for game in root.xpath("//game"):
-        description = game.findtext("description")
-        if description:
-            name_map[game.attrib["name"]] = description
-            continue
-        if game.attrib.get("parent"):
-            continue
-        identity = game.findall("identity")
-        title = identity[0].findtext("title")
-        if title:
-            name_map[game.attrib["name"]] = title
-    return name_map
-
-
-def create_m3u(playlist, local_rom_dir, dry_run):
-    logger.debug("create_m3u: Create m3u files")
-    m3u_pattern = playlist.get("local_m3u_pattern")
-    m3u_whitelist = playlist.get("local_m3u_whitelist")
-    files = defaultdict(list)
-    all_files = Path(local_rom_dir)
-    for filename in all_files.iterdir():
-        if re.compile(m3u_whitelist).search(str(filename)):
-            e = re.compile(m3u_pattern)
-            m = e.match(str(filename))
-            if m:
-                base_name = m.groups()[0].strip()
-            else:
-                base_name = filename.stem
-            files[base_name].append(filename)
-    for base_name, list_files in files.items():
-        m3u_file = Path(local_rom_dir) / f"{base_name}.m3u"
-        if not dry_run:
-            with open(m3u_file, "w") as f:
-                logger.debug(f"create_m3u: Create  {str(m3u_file)}")
-                for filename in sorted(list_files):
-                    f.write(f"{filename.name}\n")
-
-
-def update_playlist(default, playlist, dry_run):
-    def make_item(file):
-        stem = str(Path(file).stem)
-        new_item = copy.copy(item_tpl)
-        new_item["path"] = file
-        new_item["label"] = name_map.get(stem, stem)
-        new_item["db_name"] = local.name
-        return new_item
-
-    name = playlist.get("name")
-    logger.debug(f"migrate_playlist: name={name}")
-    local = Path(default.get("local_playlists")) / name
-    if not dry_run:
-        backup_file(local)
-
-    with open(local) as file:
-        data = json.load(file)
-
-    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-
-    core_path = Path(default.get("local_cores")) / playlist.get("core_path")
-    core_path = core_path.with_suffix(default.get("local_cores_suffix"))
-    data["default_core_path"] = str(core_path)
-    data["default_core_name"] = playlist.get("core_name")
-    data["scan_content_dir"] = str(local_rom_dir)
-    data["scan_dat_file_path"] = str(local_rom_dir)
-
-    if playlist.get("local_create_m3u"):
-        create_m3u(playlist, local_rom_dir, dry_run)
-
-    whitelist = playlist.get("local_whitelist", False)
-    blacklist = playlist.get("local_blacklist", False)
-    name_map = build_file_map(local_rom_dir, playlist.get("local_dat_file", ""))
-    items = []
-    files = glob.glob(str(local_rom_dir / "*"))
-    files.sort()
-    files_len = len(files)
-
-    file_list = []
-    # First Pass
-    for idx, file in enumerate(files):
-        logger.debug(
-            f"update_playlist: Update first pass [{idx+1}/{files_len}] path={Path(file).name}"
-        )
-        if Path(file).is_dir():
-            subs = glob.glob(str(Path(file) / "*"))
-            for sub in subs:
-                file_list.append(sub)
-        else:
-            file_list.append(file)
-
-    # Second Pass
-    files_len = len(file_list)
-    for idx, file in enumerate(file_list):
-        logger.debug(
-            f"update_playlist: Update second pass [{idx+1}/{files_len}] path={Path(file).name}"
-        )
-
-        if blacklist:
-            if re.compile(blacklist).search(file):
-                logger.debug(f"update_playlist: Skip {Path(file).name} is blacklisted")
-                continue
-
-        if whitelist:
-            if re.compile(whitelist).search(file):
-                logger.debug(f"update_playlist: Add {Path(file).name} is whitelisted")
-                items.append(make_item(file))
-        else:
-            items.append(make_item(file))
-
-    data["items"] = items
-    doc = json.dumps(data, indent=2)
-    logger.debug(json.dumps(data, indent=2))
-    if not dry_run:
-        with open(str(local), "w") as new_file:
-            new_file.write(doc)
-
-
-def migrate_playlist(default, playlist, temp_file, _dry_run):
-    name = playlist.get("name")
-    logger.debug(f"migrate_playlist: name={name}")
-    local = Path(default.get("local_playlists")) / name
-    with open(local) as file:
-        data = json.load(file)
-
-    core_path = (
-        data["default_core_path"]
-        .replace(default.get("local_cores_suffix"), default.get("remote_cores_suffix"))
-        .replace(default.get("local_cores"), default.get("remote_cores"))
-    )
-    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
-    data["default_core_path"] = core_path
-    data["scan_content_dir"] = str(remote_rom_dir)
-    data["scan_dat_file_path"] = ""
-
-    items = []
-    local_items = data["items"]
-    local_items_len = len(local_items)
-    for idx, item in enumerate(local_items):
-        new_item = copy.copy(item)
-        new_item["core_name"] = "DETECT"
-        new_item["core_path"] = "DETECT"
-        local_path = new_item["path"].split("#")[0]
-        local_name = Path(local_path).name
-        logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
-        new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
-        new_item["path"] = new_path
-        items.append(new_item)
-
-    data["items"] = items
-    doc = json.dumps(data)
-    logger.debug(json.dumps(data, indent=2))
-    temp_file.write(doc.encode("utf-8"))
-    temp_file.flush()
-    temp_file.seek(0)
-
-
-def copy_playlist(default, transport, playlist, temp_file):
-    name = playlist.get("name")
-    logger.debug(f"copy_playlist: name={name}")
-    transport.copy_file(Path(temp_file.name), Path(default.get("remote_playlists")) / name)
-
-
-def sync_roms_guess_job_size(default, transport, playlist):
-    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    return transport.guess_file_count(local_rom_dir, [], True)
-
-
-def sync_roms(default, transport, playlist, sync_roms_local, callback):
-    name = playlist.get("name")
-    logger.debug(f"sync_roms: name={name}")
-    local_rom_dir = Path(default.get("local_roms")) / playlist.get("local_folder")
-    if sync_roms_local:
-        remote_rom_dir = Path(sync_roms_local) / playlist.get("remote_folder")
-        transport.copy_local_files(local_rom_dir, remote_rom_dir, [])
-    else:
-        remote_rom_dir = Path(default.get("remote_roms")) / playlist.get("remote_folder")
-        transport.copy_files(
-            local_rom_dir, remote_rom_dir, whitelist=[], recursive=True, callback=callback
-        )
 
 
 def expand_config(default):
@@ -737,7 +755,7 @@ def expand_config(default):
     "-u",
     "do_update_playlists",
     is_flag=True,
-    help="Update local playlist files with the results from scanning the local ROM folders",
+    help="Update local playlist files by scanning the ROM directories for results",
 )
 @click.option(
     "--sync-roms-local",
@@ -841,20 +859,21 @@ def main(
     if do_sync_thumbails:
         jobs.append(ThumbnailsSync(default, playlists, transport))
 
-    system_step_actions = {}
+    system_jobs = []
     if do_update_playlists:
-        system_step_actions["update_playlist"] = {"name": "Update Playlist"}
+        system_jobs.append(PlaylistUpdatecJob(default, transport))
 
     if do_sync_playlists:
-        system_step_actions["sync_playlists"] = {"name": "Sync Playlist"}
+        system_jobs.append(PlaylistSyncJob(default, transport))
 
     if do_sync_roms:
-        system_step_actions["sync_roms"] = {"name": "Sync ROMs"}
+        system_jobs.append(RomSyncJob(default, transport))
 
     if system_name:
         playlists = [p for p in config.get("playlists", []) if p.get("name") == system_name]
     else:
         playlists = config.get("playlists", [])
+
     if not any(
         [
             do_sync_playlists,
@@ -873,8 +892,9 @@ def main(
         if not playlist.get("disabled", False):
             systems[name] = {"name": name, "playlist": playlist}
 
-    jobs_len = sum([j.size for j in jobs])
-    overall_task_id = overall_progress.add_task("", total=jobs_len + len(systems))
+    jobs_size = sum([j.size for j in jobs])
+    system_size = sum([j.size for j in system_jobs])
+    overall_task_id = overall_progress.add_task("", total=jobs_size + system_size)
     with Live(progress_group):
         for (
             idx,
@@ -918,36 +938,22 @@ def main(
                 )
                 overall_progress.update(overall_task_id, description=top_descr)
                 current_task_id = current_system_progress.add_task(f"Syncing system {name}")
-                steps_size = len(system_step_actions)
-                if do_sync_roms:
-                    steps_size += sync_roms_guess_job_size(default, transport, playlist)
+                steps_size = len(system_jobs)
+
                 system_steps_task_id = system_steps_progress.add_task(
                     "", total=steps_size, name=name
                 )
-                for action_key in system_step_actions:
-                    action = system_step_actions[action_key]["name"]
-                    step_task_id = step_progress.add_task("", action=action, name=name)
+                for job in system_jobs:
+                    step_task_id = step_progress.add_task("", action=job.name, name=name)
                     if dry_run:
                         time.sleep(0.2)
 
-                    if do_update_playlists and action_key == "update_playlist":
-                        update_playlist(default, playlist, dry_run)
-
-                    if do_sync_playlists and action_key == "sync_playlists":
-                        with tempfile.NamedTemporaryFile() as temp_file:
-                            migrate_playlist(default, playlist, temp_file, dry_run)
-                            copy_playlist(default, transport, playlist, temp_file)
-
-                    if do_sync_roms and action_key == "sync_roms":
-                        sync_roms(
-                            default,
-                            transport,
-                            playlist,
-                            sync_roms_local,
-                            lambda system_steps_task_id=system_steps_task_id: system_steps_progress.update(
-                                system_steps_task_id, advance=1
-                            ),
+                    job.setup(playlist)
+                    job.do(
+                        lambda system_steps_task_id=system_steps_task_id: system_steps_progress.update(
+                            system_steps_task_id, advance=1
                         )
+                    )
 
                     step_progress.update(step_task_id, advance=1)
                     step_progress.stop_task(step_task_id)
