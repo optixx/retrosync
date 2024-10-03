@@ -911,8 +911,8 @@ def main(
                 )
                 for job in system_jobs:
                     step_task_id = step_progress.add_task("", action=job.name, name=name)
-                    if dry_run:
-                        time.sleep(0.2)
+                    if do_debug:
+                        time.sleep(1)
 
                     job.setup(playlist)
                     job.do(
