@@ -904,10 +904,14 @@ def main(
                 )
                 overall_progress.update(overall_task_id, description=top_descr)
                 current_task_id = current_system_progress.add_task(f"Syncing system {name}")
-                steps_size = len(system_jobs)
+
+                system_jobs_size = 0
+                for job in system_jobs:
+                    job.setup(playlist)
+                    system_jobs_size += job.size
 
                 system_steps_task_id = system_steps_progress.add_task(
-                    "", total=steps_size, name=name
+                    "", total=system_jobs_size, name=name
                 )
                 for job in system_jobs:
                     step_task_id = step_progress.add_task("", action=job.name, name=name)
