@@ -150,8 +150,7 @@ class TransportBaseUnix(TransportBase):
         return f'"{path}"'
 
     def execute(self, cmd):
-        password = self.default.get("password")
-        logger.debug("execute: cmd=%s", cmd.replace(password, "***"))
+        logger.debug(f"execute: cmd={cmd}")
         if self.dry_run:
             return
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
@@ -202,7 +201,7 @@ class TransportLocalUnix(TransportBaseUnix):
             self.check_executable_exists(command)
 
     def ensure_dir_exists(self, path_directory: Path):
-        cmd = f'mkdir "{path_directory}"'
+        cmd = f'mkdir -p "{path_directory}"'
         self.execute(cmd)
 
     def copy_file(self, local_filename: Path, dest_filename: Path):
@@ -442,6 +441,7 @@ class FavoritesSync(BiosSync):
             for p in playlists:
                 if p.get("core_name") == core_name:
                     return p
+            print(f"Can not find core {core_name}")
             raise AssertionError()
 
         logger.debug(f"migrate: filename={favorites_file}")
