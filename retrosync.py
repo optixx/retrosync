@@ -140,6 +140,15 @@ class TransportBaseUnix(TransportBase):
     def check(self):
         pass
 
+    def ensure_dir_exists(self, path_directory: Path):
+        pass
+
+    def command_prefix(self):
+        return ""
+
+    def build_dest(self, path: Path):
+        return f'"{path}"'
+
     def execute(self, cmd):
         password = self.default.get("password")
         logger.debug("execute: cmd=%s", cmd.replace(password, "***"))
@@ -147,20 +156,20 @@ class TransportBaseUnix(TransportBase):
             return
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         poll = select.poll()
-        poll.register(p.stdout, select.POLLIN | select.POLLHUP)
-        poll.register(p.stderr, select.POLLIN | select.POLLHUP)
+        poll.register(p.stdout, select.POLLIN | select.POLLHUP)  # pyright: ignore
+        poll.register(p.stderr, select.POLLIN | select.POLLHUP)  # pyright: ignore
         pollc = 2
         events = poll.poll()
         while pollc > 0 and len(events) > 0:
             for event in events:
                 (rfd, event) = event
                 if event & select.POLLIN:
-                    if rfd == p.stdout.fileno():
-                        lines = p.stdout.readlines()
+                    if rfd == p.stdout.fileno():  # pyright: ignore
+                        lines = p.stdout.readlines()  # pyright: ignore
                         for line in lines:
                             logger.debug("execute: stdout=%s", line)
-                    if rfd == p.stderr.fileno():
-                        line = p.stderr.readline()
+                    if rfd == p.stderr.fileno():  # pyright: ignore
+                        line = p.stderr.readline()  # pyright: ignore
                         logger.debug("execute: stderr=%s", line)
                 if event & select.POLLHUP:
                     poll.unregister(rfd)
@@ -177,6 +186,7 @@ class TransportBaseUnix(TransportBase):
         recursive: bool = False,
         callback=None,
     ):
+        self.ensure_dir_exists(remote_path)
         args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete"
         if whitelist:
             for item in whitelist:
@@ -191,18 +201,13 @@ class TransportLocalUnix(TransportBaseUnix):
         for command in ["cp", "mkdir", "rsync"]:
             self.check_executable_exists(command)
 
-    def command_prefix(self):
-        return ""
-
-    def build_dest(self, path):
-        return f'"{path}"'
-
     def ensure_dir_exists(self, path_directory: Path):
         cmd = f'mkdir "{path_directory}"'
         self.execute(cmd)
 
-    def copy_file(self, local_filename: Path, remote_filename: Path):
-        cmd = f'cp "{local_filename}" {self.build_dest(remote_filename)}'
+    def copy_file(self, local_filename: Path, dest_filename: Path):
+        self.ensure_dir_exists(dest_filename.parent)
+        cmd = f'cp "{local_filename}" {self.build_dest(dest_filename)}'
         self.execute(cmd)
 
 
@@ -211,7 +216,7 @@ class TransportRemoteUnix(TransportBaseUnix):
         for command in ["ssh", "scp", "rsync", "sshpass"]:
             self.check_executable_exists(command)
 
-    def command_prefix(self):
+    def command_prefix(self):  # pyright: ignore
         password = self.default.get("password")
         return f'sshpass -p "{password}"'
 
@@ -284,7 +289,7 @@ class TransportRemoteWindows(TransportBaseWindows):
             remote_file_attr = self.sftp.stat(str(remote_filename))
             local_file_attr = local_filename.stat()
             if (
-                int(local_file_attr.st_mtime) > int(remote_file_attr.st_mtime)
+                int(local_file_attr.st_mtime) > int(remote_file_attr.st_mtime)  # type: ignore
                 or local_file_attr.st_size != remote_file_attr.st_size
             ):
                 self.sftp.put(str(local_filename), str(remote_filename))
