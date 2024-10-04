@@ -90,7 +90,10 @@ class Transport:
         elif current_platform in ["Windows"]:
             return TransportWindows(default, dry_run)
         else:
-            raise NotImplementedError
+            print(
+                f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
+            )
+            sys.exit(1)
 
 
 class TransportBase:
@@ -119,15 +122,15 @@ class TransportUnix(TransportBase):
         logger.debug(f"TransportUnix::__ctor__: dry_run={self.dry_run}")
         self.check()
 
-    def check(self):
-        def check_executable_exists(executable_name):
-            executable_path = shutil.which(executable_name)
-            if not executable_path:
-                print(f"Executable '{executable_name}' not found.")
-                sys.exit(-1)
+    def check_executable_exists(self, executable_name):
+        executable_path = shutil.which(executable_name)
+        if not executable_path:
+            print(f"Executable '{executable_name}' not found.")
+            sys.exit(-1)
 
+    def check(self):
         for command in ["ssh", "scp", "rsync", "sshpass"]:
-            check_executable_exists(command)
+            self.check_executable_exists(command)
 
     def execute(self, cmd):
         password = self.default.get("password")
@@ -633,17 +636,6 @@ class PlaylistUpdatecJob(SystemJob):
                 new_file.write(doc)
 
 
-def check_platform():
-    current_platform = platform.system()
-    if current_platform not in ["Darwin", "Linux", "Windows"]:
-        print(
-            f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
-        )
-        sys.exit(1)
-    else:
-        print(f"Running on {current_platform}. Proceeding...")
-
-
 def match_system(system_name, playlists):
     if system_name:
         dt1 = 1_000
@@ -783,7 +775,6 @@ def main(
     yes,
 ):
     global logger
-    check_platform()
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
