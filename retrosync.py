@@ -78,17 +78,17 @@ class Transport:
     def __new__(cls, default, dry_run, force_transport):
         if force_transport:
             if force_transport == "unix":
-                return TransportUnix(default, dry_run)
+                return TransportBaseUnix.getInstance(default, dry_run)
             elif force_transport == "windows":
-                return TransportWindows(default, dry_run)
+                return TransportRemoteWindows(default, dry_run)
             else:
                 raise NotImplementedError
 
         current_platform = platform.system()
         if current_platform in ["Darwin", "Linux"]:
-            return TransportUnix(default, dry_run)
+            return TransportBaseUnix.getInstance(default, dry_run)
         elif current_platform in ["Windows"]:
-            return TransportWindows(default, dry_run)
+            return TransportRemoteWindows(default, dry_run)
         else:
             print(
                 f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
@@ -115,11 +115,20 @@ class TransportBase:
         return cnt
 
 
-class TransportUnix(TransportBase):
+class TransportBaseUnix(TransportBase):
+    @staticmethod
+    def getInstance(default, dry_run):
+        if default.get("target") == "remote":
+            return TransportRemoteUnix(default, dry_run)
+        else:
+            return TransportLocalUnix(default, dry_run)
+
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
-        logger.debug(f"TransportUnix::__ctor__: dry_run={self.dry_run}")
+        logger.debug(
+            f"TransportBaseUnix::__ctor__: dry_run={self.dry_run} target={default.get("target")}"
+        )
         self.check()
 
     def check_executable_exists(self, executable_name):
@@ -129,8 +138,7 @@ class TransportUnix(TransportBase):
             sys.exit(-1)
 
     def check(self):
-        for command in ["ssh", "scp", "rsync", "sshpass"]:
-            self.check_executable_exists(command)
+        pass
 
     def execute(self, cmd):
         password = self.default.get("password")
@@ -161,20 +169,6 @@ class TransportUnix(TransportBase):
                     events = poll.poll()
         p.wait()
 
-    def copy_file(self, local_filename: Path, remote_filename: Path):
-        hostname = self.default.get("hostname")
-        username = self.default.get("username")
-        password = self.default.get("password")
-        cmd = f'sshpass -p "{password}" scp "{local_filename}" "{username}@{hostname}:{remote_filename}"'
-        self.execute(cmd)
-
-    def ensure_remote_dir_exists(self, remote_directory: Path):
-        hostname = self.default.get("hostname")
-        username = self.default.get("username")
-        password = self.default.get("password")
-        cmd = f'sshpass -p "{password}"  ssh {username}@{hostname} "mkdir \'{remote_directory}\'"'
-        self.execute(cmd)
-
     def copy_files(
         self,
         local_path: Path,
@@ -183,48 +177,106 @@ class TransportUnix(TransportBase):
         recursive: bool = False,
         callback=None,
     ):
-        hostname = self.default.get("hostname")
-        username = self.default.get("username")
-        password = self.default.get("password")
         args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete"
         if whitelist:
             for item in whitelist:
                 args += f'--include="*{item}" '
             args += '--exclude="*" '
-        cmd = f'sshpass -p "{password}" rsync {args} "{local_path}/" "{username}@{hostname}:{remote_path}"'
+        cmd = f'{self.command_prefix()} rsync {args} "{local_path}/" {self.build_dest(remote_path)}'
         self.execute(cmd)
 
 
-class TransportWindows(TransportBase):
+class TransportLocalUnix(TransportBaseUnix):
+    def check(self):
+        for command in ["cp", "mkdir", "rsync"]:
+            self.check_executable_exists(command)
+
+    def command_prefix(self):
+        return ""
+
+    def build_dest(self, path):
+        return f'"{path}"'
+
+    def ensure_dir_exists(self, path_directory: Path):
+        cmd = f'mkdir "{path_directory}"'
+        self.execute(cmd)
+
+    def copy_file(self, local_filename: Path, remote_filename: Path):
+        cmd = f'cp "{local_filename}" {self.build_dest(remote_filename)}'
+        self.execute(cmd)
+
+
+class TransportRemoteUnix(TransportBaseUnix):
+    def check(self):
+        for command in ["ssh", "scp", "rsync", "sshpass"]:
+            self.check_executable_exists(command)
+
+    def command_prefix(self):
+        password = self.default.get("password")
+        return f'sshpass -p "{password}"'
+
+    def build_dest(self, path):
+        hostname = self.default.get("hostname")
+        username = self.default.get("username")
+        return f'"{username}@{hostname}:{path}"'
+
+    def copy_file(self, local_filename: Path, remote_filename: Path):
+        cmd = f'{self.command_prefix()} scp "{local_filename}" {self.build_dest(remote_filename)}'
+        self.execute(cmd)
+
+    def ensure_dir_exists(self, path_directory: Path):
+        hostname = self.default.get("hostname")
+        username = self.default.get("username")
+        cmd = f"{self.command_prefix()} ssh {username}@{hostname} \"mkdir '{path_directory}'\""
+        self.execute(cmd)
+
+
+class TransportBaseWindows(TransportBase):
+    @staticmethod
+    def getInstance(default, dry_run):
+        if default.get("target") == "remote":
+            return TransportRemoteWindows(default, dry_run)
+        else:
+            return TransportLocalWindows(default, dry_run)
+
+
+class TransportLocalWindows(TransportBaseWindows):
+    def __init__(self, default, dry_run):
+        self.default = default
+        self.dry_run = dry_run
+        logger.debug(f"TransportLocalWindows::__ctor__: dry_run={self.dry_run}")
+
+
+class TransportRemoteWindows(TransportBaseWindows):
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.connected = False
-        logger.debug(f"TransportWindows::__ctor__: dry_run={self.dry_run}")
+        logger.debug(f"TransportRemoteWindows::__ctor__: dry_run={self.dry_run}")
 
     def connect(self):
         if self.dry_run:
             return
         if self.connected:
             return
-        logger.debug("TransportWindows::connect start")
+        logger.debug("TransportRemoteWindows::connect start")
         self.ssh.connect(
             self.default.get("hostname"),
             username=self.default.get("username"),
             password=self.default.get("password"),
         )
-        logger.debug("TransportWindows::connect connected")
+        logger.debug("TransportRemoteWindows::connect connected")
         self.sftp = self.ssh.open_sftp()
-        logger.debug("TransportWindows::connect sftp opened")
+        logger.debug("TransportRemoteWindows::connect sftp opened")
         self.connected = True
 
     def copy_file(self, local_filename: Path, remote_filename: Path):
         self.connect()
         if self.dry_run:
             logger.debug(
-                f"TransportWindows::copy_file: dry-run {local_filename} to {remote_filename}"
+                f"TransportRemoteWindows::copy_file: dry-run {local_filename} to {remote_filename}"
             )
             return
 
@@ -237,25 +289,25 @@ class TransportWindows(TransportBase):
             ):
                 self.sftp.put(str(local_filename), str(remote_filename))
                 logger.debug(
-                    f"TransportWindows::copy_file: newer {local_filename} to {remote_filename}"
+                    f"TransportRemoteWindows::copy_file: newer {local_filename} to {remote_filename}"
                 )
         except FileNotFoundError:
             self.sftp.put(str(local_filename), str(remote_filename))
             logger.debug(
-                f"TransportWindows::copy_file: created {local_filename} to {remote_filename}"
+                f"TransportRemoteWindows::copy_file: created {local_filename} to {remote_filename}"
             )
 
-    def ensure_remote_dir_exists(self, remote_directory: Path):
-        logger.debug(f"TransportWindows::ensure_remote_dir_exists: check {remote_directory}")
+    def ensure_dir_exists(self, remote_directory: Path):
+        logger.debug(f"TransportRemoteWindows::ensure_dir_exists: check {remote_directory}")
         if self.dry_run:
-            logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
+            logger.debug(f"TransportRemoteWindows::ensure_dir_exists: created {remote_directory}")
             return
 
         try:
             self.sftp.stat(str(remote_directory))
         except FileNotFoundError:
             self.sftp.mkdir(str(remote_directory))
-            logger.debug(f"TransportWindows::ensure_remote_dir_exists: created {remote_directory}")
+            logger.debug(f"TransportRemoteWindows::ensure_dir_exists: created {remote_directory}")
 
     def copy_files(
         self,
@@ -266,14 +318,14 @@ class TransportWindows(TransportBase):
         callback=None,
     ):
         guessed_len = self.guess_file_count(local_path, whitelist, recursive)
-        logger.debug(f"TransportWindows::copy_files: {local_path} -> {remote_path}")
+        logger.debug(f"TransportRemoteWindows::copy_files: {local_path} -> {remote_path}")
         self.connect()
-        self.ensure_remote_dir_exists(remote_path)
+        self.ensure_dir_exists(remote_path)
         cnt = 1
 
         for _, local_filename in enumerate(local_path.iterdir()):
             logger.debug(
-                f"TransportWindows::copy_files: [{cnt}/{guessed_len}] {local_filename.name}"
+                f"TransportRemoteWindows::copy_files: [{cnt}/{guessed_len}] {local_filename.name}"
             )
             if callback:
                 callback()
@@ -296,13 +348,13 @@ class TransportWindows(TransportBase):
                             break
                     if not match:
                         logger.debug(
-                            f"TransportWindows::copy_files: not whitelist match {local_filename}"
+                            f"TransportRemoteWindows::copy_files: not whitelist match {local_filename}"
                         )
                         continue
 
                 if self.dry_run:
                     logger.debug(
-                        f"TransportWindows::copy_files: dry-run {local_filename} to {remote_filename}"
+                        f"TransportRemoteWindows::copy_files: dry-run {local_filename} to {remote_filename}"
                     )
                     continue
 
@@ -315,12 +367,12 @@ class TransportWindows(TransportBase):
                     ):
                         self.sftp.put(str(local_filename), str(remote_filename))
                         logger.debug(
-                            f"TransportWindows::copy_files: newer/size {local_filename} to {remote_filename}"
+                            f"TransportRemoteWindows::copy_files: newer/size {local_filename} to {remote_filename}"
                         )
                 except FileNotFoundError:
                     self.sftp.put(str(local_filename), str(remote_filename))
                     logger.debug(
-                        f"TransportWindows::copy_files: create {local_filename} to {remote_filename}"
+                        f"TransportRemoteWindows::copy_files: create {local_filename} to {remote_filename}"
                     )
 
 
