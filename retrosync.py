@@ -197,17 +197,17 @@ class TransportBaseUnix(TransportBase):
 
 class TransportLocalUnix(TransportBaseUnix):
     def check(self):
-        for command in ["cp", "mkdir", "rsync"]:
+        for command in ["rsync"]:
             self.check_executable_exists(command)
 
     def ensure_dir_exists(self, path_directory: Path):
-        cmd = f'mkdir -p "{path_directory}"'
-        self.execute(cmd)
+        if not self.dry_run:
+            path_directory.mkdir(parents=True)
 
     def copy_file(self, src_filename: Path, dest_filename: Path):
         self.ensure_dir_exists(dest_filename.parent)
-        cmd = f'cp "{src_filename}" {self.build_dest(dest_filename)}'
-        self.execute(cmd)
+        if not self.dry_run:
+            shutil.copy(src_filename, dest_filename)
 
 
 class TransportRemoteUnix(TransportBaseUnix):
