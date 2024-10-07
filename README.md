@@ -3,27 +3,34 @@
 
 ![Logo](https://github.com/optixx/retrosync/raw/main/assets/img/logo.png)
 
-Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlists and ROMs from your desktop computer to your Steam Deck.
+Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlists and ROMs from your desktop computer to your Steam Deck or iOS based devices.
 
+## Features syncing to Steamdeck
+1. Synchronize via SSH RetroArch playlists, favorites from Desktop to Steam Deck
+2. Synchronize via SSH ROMs, Bios files and thumbnail
 
-## Features
-1. Synchronize RetroArch playlists from Desktop to Steam Deck
-2. Synchronize ROM files and purge unused ROMs on the remote server
-3. Synchronize BIOS files
-4. Synchronize RetroArch favorites from Desktop to Steam Deck
-5. Synchronize thumbnail images
-6. Recreate local playlists by scanning local folders
-7. Create local m3u files using detection and normalizing regular expressions
-8. Support for XML DAT archives
-9. Configure your cores according to each system
-10. Sync ROMs to a locally mounted SD card (or any other external storage)
+## Features syncing to iOS device
+1. Synchronize RetroArch playlists, favorites from Desktop to local folder
+2. Synchronize ROMs, Bios files and thumbnail to local folder
+3. Due to to missing SSH support on iOS device prepared files need to be synced with the Finder, iCloud Sync or 3rd party
+solutions like [LocalSend](https://localsend.org)
 
+## Features for all target device
+1. Update and recreate local playlists by scanning local folders
+2. Create local m3u files using detection and normalizing regular expressions
+3. Support for XML DAT archives
+4. Configure your local and remote cores according to each system
 
 ![Demo](https://github.com/optixx/retrosync/raw/main/assets/img/demo.gif)
 
 ## Compatibility
 
  Retrosync functions with macOS, Linux, and Windows, relying on previously installed tools such as Secure Shell (SSH) and Rsync, or utilizing pure Python Secure Shell implementations. This means that you need to enable SSH on your Steam Deck if you have not done so already; you can follow this guide for [instructions](https://shendrick.net/Gaming/2022/05/30/sshonsteamdeck.html).
+
+The primary distinction between the two target device groups lies in the fact that the Steam Deck can be synchronized directly via the SSH protocol, while iOS devices require the use of Finder or iCloud Sync for data transfer. Consequently, all RetroArch-related files are prepared locally, with paths and configurations altered to suit the target system, but stored within a local folder intended for later transfer to the designated devices. This local sync feature offers an optimal solution for syncing onto SD cards or external disks, facilitating the transfer of larger collections to the Steam Deck without incurring slower network traffic.
+
+
+
 
 
 ## Installing
