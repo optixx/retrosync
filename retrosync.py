@@ -264,6 +264,31 @@ class TransportLocalWindows(TransportBaseWindows):
         if not self.dry_run:
             shutil.copy(src_filename, dest_filename)
 
+    def copy_files(
+        self,
+        src_path: Path,
+        dest_path: Path,
+        whitelist: list,
+        recursive: bool = False,
+        callback=None,
+    ):
+        guessed_len = self.guess_file_count(src_path, whitelist, recursive)
+        logger.debug(f"TransportLocalWindows::copy_files: {src_path} -> {dest_path}")
+        self.ensure_dir_exists(dest_path)
+        cnt = 1
+        for item in src_path.iterdir():
+            logger.debug(f"TransportLocaleWindows::copy_files: [{cnt}/{guessed_len}] {item.name}")
+            if callback:
+                callback()
+            cnt += 1
+            s = item
+            d = dest_path / item.name
+            if s.is_dir():
+                self.copy_files(s, d, whitelist, recursive, callback)
+            else:
+                if not self.dry_run:
+                    shutil.copy2(s, d)
+
 
 class TransportRemoteWindows(TransportBaseWindows):
     def __init__(self, default, dry_run):
