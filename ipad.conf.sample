@@ -1,0 +1,164 @@
+[default]
+target = "local"
+hostname = ""
+username = ""
+password = ""
+
+src_playlists = "~/Library/Application Support/RetroArch/playlists"
+src_bios = "~/Library/Application Support/RetroArch/system"
+src_config = "~/Library/Application Support/RetroArch/config/"
+src_roms = "~/Dropbox/Software/Roms"
+src_cores = "~/Library/Application Support/RetroArch/cores"
+src_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
+src_cores_suffix = ".dylib"
+
+dest_playlists = "~/Downloads/ipad/Retroach/playlists"
+dest_bios = "~/Downloads/ipad/Retroach/system"
+dest_config = "~/Downloads/ipad/Retroach/config"
+dest_roms = "~/Downloads/ipad/Roms"
+dest_cores = "~/Downloads/ipad/Retroach/cores"
+dest_thumbnails = "~/Downloads/ipad/Retroach/thumbnails"
+
+target_roms =  "~/Documents/Roms"
+target_cores = "/Frameworks"
+target_cores_suffix = ".framework"
+
+[[playlists]]
+name = "Atari - 2600.lpl"
+src_folder = "Atari - 2600"
+dest_folder = "Atari - 2600"
+src_core_path = "stella_libretro"
+src_core_name = "Atari - 2600 (Stella)"
+dest_core_path = "stella.libretro"
+dest_core_name = "Atari - 2600 (Stella)"
+
+[[playlists]]
+name = "FBNeo - Arcade Games.lpl"
+src_folder = "SNK - Neo Geo"
+src_whitelist = '\.zip'
+src_dat_file = "FinalBurnNeo.dat"
+dest_folder = "SNK - Neo Geo"
+src_core_path = "fbneo_libretro"
+src_core_name = "Arcade (FinalBurn Neo)"
+dest_core_path = "fbneo.libretro"
+dest_core_name = "Arcade (FinalBurn Neo)"
+
+[[playlists]]
+name = "MAME 2003-Plus.lpl"
+src_folder = "MAME 2003-Plus"
+src_dat_file = "FinalBurnNeo.dat"
+dest_folder = "MAME 2003-Plus"
+src_core_path = "mame2003_plus_libretro"
+src_core_name = "Arcade (MAME 2003-Plus)"
+dest_core_path = "mame2003_plus_libretro"
+dest_core_name = "Arcade (MAME 2003-Plus)"
+
+[[playlists]]
+name = "Nintendo - Game Boy Advance.lpl"
+src_folder = "Nintendo - Game Boy Advance"
+dest_folder = "Nintendo - Game Boy Advance"
+src_core_path = "mgba_libretro"
+src_core_name = "Nintendo - Game Boy Advance (mGBA)"
+dest_core_path = "vba.next.libretro"
+dest_core_name = "Nintendo - Game Boy Advance (mGBA)"
+
+[[playlists]]
+name = "Nintendo - Nintendo 64.lpl"
+src_folder = "Nintendo - Nintendo 64"
+dest_folder = "Nintendo - Nintendo 64"
+src_core_path = "mupen64plus_next_libretro"
+src_core_name = "Nintendo - Nintendo 64 (Mupen64Plus-Next)"
+dest_core_path = "mupen64plus_next_libretro"
+dest_core_name = "Nintendo - Nintendo 64 (Mupen64Plus-Next)"
+
+[[playlists]]
+name = "Nintendo - Nintendo Entertainment System.lpl"
+src_folder = "Nintendo - Nintendo 64"
+dest_folder = "Nintendo - Nintendo Entertainment System"
+src_core_path = "mesen_libretro"
+src_core_name = "Nintendo - NES / Famicom (Mesen)"
+dest_core_path = "mesen.libretro"
+dest_core_name = "Nintendo - NES / Famicom (Mesen)"
+
+[[playlists]]
+name = "Nintendo - Super Nintendo Entertainment System.lpl"
+src_folder = "Nintendo - Super Nintendo Entertainment System"
+dest_folder = "Nintendo - Super Nintendo Entertainment System"
+src_core_path = "snes9x_libretro"
+src_core_name = "Nintendo - SNES / SFC (Snes9x)"
+dest_core_path = "snes9x.libretro"
+dest_core_name = "Nintendo - SNES / SFC (Snes9x)"
+
+[[playlists]]
+name = "Sega - Master System.lpl"
+src_folder = "Sega - Master System"
+dest_folder = "Sega - Master System"
+src_core_path = "picodrive_libretro"
+src_core_name = "Sega - MS/GG/MD/CD/32X (PicoDrive)"
+dest_core_path = "picodrive.libretro"
+dest_core_name = "Sega - MS/GG/MD/CD/32X (PicoDrive)"
+
+[[playlists]]
+name = "Sega - Mega Drive.lpl"
+src_folder = "Sega - Mega Drive"
+dest_folder = "Sega - Mega Drive"
+src_core_path = "picodrive_libretro"
+src_core_name = "Sega - MS/GG/MD/CD/32X (PicoDrive)"
+dest_core_path = "picodrive.libretro"
+dest_core_name = "Sega - MS/GG/MD/CD/32X (PicoDrive)"
+
+[[playlists]]
+name = "Sega - Saturn.lpl"
+src_folder = "Sega - Saturn"
+src_whitelist = '\.(cue|chd)$'
+src_blacklist = '\.bin$'
+dest_folder = "Sega - Saturn"
+src_core_path = "mednafen_saturn_libretro"
+src_core_name = "Sega - Saturn (Beetle Saturn)"
+dest_core_path = "mednafen.saturn.libretro"
+dest_core_name = "Sega - Saturn (Beetle Saturn)"
+
+[[playlists]]
+name = "Sony - PlayStation.lpl"
+src_folder = "Sony - PlayStation"
+src_whitelist = '\.(m3u|cue)$'
+src_blacklist = '\.bin$'
+dest_folder = "Sony - PlayStation"
+src_core_path = "mednafen_psx_libretro"
+src_core_name = "Sony - PlayStation (Beetle PSX)"
+dest_core_path = "mednafen.psx.hw.libretro"
+dest_core_name = "Sony - PlayStation (Beetle HW PSX)"
+
+[[playlists]]
+name = "Sony - PlayStation 2.lpl"
+src_folder = "Sony - PlayStation 2"
+dest_folder = "Sony - PlayStation 2"
+src_core_path = "play_libretro"
+src_core_name = "Sony - PlayStation 2 (Play!)"
+dest_core_path = "play_libretro"
+dest_core_name = "Sony - PlayStation 2 (Play!)"
+
+[[playlists]]
+name = "Cannonball.lpl"
+src_folder = "Cannonball"
+src_whitelist = '.*10187.*'
+dest_folder = "Cannonball"
+src_core_path = "cannonball_libretro"
+src_core_name = "Cannonball"
+dest_core_path = "cannonball_libretro"
+dest_core_name = "Cannonball"
+
+[[playlists]]
+name = "Commodore - Amiga.lpl"
+src_folder = "Commodore - Amiga"
+src_whitelist = '\.m3u$'
+src_blacklist = '\.adf$'
+src_create_m3u = true
+src_m3u_whitelist = '\.adf$'
+src_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
+dest_folder = "Commodore - Amiga"
+src_core_path = "puae_libretro"
+src_core_name = "Commodore - Amiga (PUAE)"
+dest_core_path = "puae.libretro"
+dest_core_name = "Commodore - Amiga (PUAE)"
+disabled = false
