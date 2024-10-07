@@ -9,13 +9,13 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 1. Synchronize via SSH RetroArch playlists, favorites from Desktop to Steam Deck
 2. Synchronize via SSH ROMs, Bios files and thumbnail
 
-## Features syncing to iOS device
+## Features syncing to iOS devices
 1. Synchronize RetroArch playlists, favorites from Desktop to local folder
 2. Synchronize ROMs, Bios files and thumbnail to local folder
 3. Due to to missing SSH support on iOS device prepared files need to be synced with the Finder, iCloud Sync or 3rd party
 solutions like [LocalSend](https://localsend.org)
 
-## Features for all target device
+## Features for all target devices
 1. Update and recreate local playlists by scanning local folders
 2. Create local m3u files using detection and normalizing regular expressions
 3. Support for XML DAT archives
