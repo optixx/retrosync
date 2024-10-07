@@ -97,12 +97,12 @@ class Transport:
 
 
 class TransportBase:
-    def guess_file_count(self, local_path: Path, whitelist: list, recursive=False):
+    def guess_file_count(self, src_path: Path, whitelist: list, recursive=False):
         cnt = 0
         if recursive:
-            generator = local_path.rglob("*")
+            generator = src_path.rglob("*")
         else:
-            generator = local_path.glob("*")
+            generator = src_path.glob("*")
         for filename in generator:
             if whitelist:
                 for item in whitelist:
@@ -179,19 +179,19 @@ class TransportBaseUnix(TransportBase):
 
     def copy_files(
         self,
-        local_path: Path,
-        remote_path: Path,
+        src_path: Path,
+        dest_path: Path,
         whitelist: list,
         recursive: bool = False,
         callback=None,
     ):
-        self.ensure_dir_exists(remote_path)
+        self.ensure_dir_exists(dest_path)
         args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete"
         if whitelist:
             for item in whitelist:
                 args += f'--include="*{item}" '
             args += '--exclude="*" '
-        cmd = f'{self.command_prefix()} rsync {args} "{local_path}/" {self.build_dest(remote_path)}'
+        cmd = f'{self.command_prefix()} rsync {args} "{src_path}/" {self.build_dest(dest_path)}'
         self.execute(cmd)
 
 
@@ -204,9 +204,9 @@ class TransportLocalUnix(TransportBaseUnix):
         cmd = f'mkdir -p "{path_directory}"'
         self.execute(cmd)
 
-    def copy_file(self, local_filename: Path, dest_filename: Path):
+    def copy_file(self, src_filename: Path, dest_filename: Path):
         self.ensure_dir_exists(dest_filename.parent)
-        cmd = f'cp "{local_filename}" {self.build_dest(dest_filename)}'
+        cmd = f'cp "{src_filename}" {self.build_dest(dest_filename)}'
         self.execute(cmd)
 
 
@@ -224,8 +224,8 @@ class TransportRemoteUnix(TransportBaseUnix):
         username = self.default.get("username")
         return f'"{username}@{hostname}:{path}"'
 
-    def copy_file(self, local_filename: Path, remote_filename: Path):
-        cmd = f'{self.command_prefix()} scp "{local_filename}" {self.build_dest(remote_filename)}'
+    def copy_file(self, src_filename: Path, dest_filename: Path):
+        cmd = f'{self.command_prefix()} scp "{src_filename}" {self.build_dest(dest_filename)}'
         self.execute(cmd)
 
     def ensure_dir_exists(self, path_directory: Path):
@@ -276,69 +276,69 @@ class TransportRemoteWindows(TransportBaseWindows):
         logger.debug("TransportRemoteWindows::connect sftp opened")
         self.connected = True
 
-    def copy_file(self, local_filename: Path, remote_filename: Path):
+    def copy_file(self, src_filename: Path, dest_filename: Path):
         self.connect()
         if self.dry_run:
             logger.debug(
-                f"TransportRemoteWindows::copy_file: dry-run {local_filename} to {remote_filename}"
+                f"TransportRemoteWindows::copy_file: dry-run {src_filename} to {dest_filename}"
             )
             return
 
         try:
-            remote_file_attr = self.sftp.stat(str(remote_filename))
-            local_file_attr = local_filename.stat()
+            dest_file_attr = self.sftp.stat(str(dest_filename))
+            src_file_attr = src_filename.stat()
             if (
-                int(local_file_attr.st_mtime) > int(remote_file_attr.st_mtime)  # type: ignore
-                or local_file_attr.st_size != remote_file_attr.st_size
+                int(src_file_attr.st_mtime) > int(dest_file_attr.st_mtime)  # type: ignore
+                or src_file_attr.st_size != dest_file_attr.st_size
             ):
-                self.sftp.put(str(local_filename), str(remote_filename))
+                self.sftp.put(str(src_filename), str(dest_filename))
                 logger.debug(
-                    f"TransportRemoteWindows::copy_file: newer {local_filename} to {remote_filename}"
+                    f"TransportRemoteWindows::copy_file: newer {src_filename} to {dest_filename}"
                 )
         except FileNotFoundError:
-            self.sftp.put(str(local_filename), str(remote_filename))
+            self.sftp.put(str(src_filename), str(dest_filename))
             logger.debug(
-                f"TransportRemoteWindows::copy_file: created {local_filename} to {remote_filename}"
+                f"TransportRemoteWindows::copy_file: created {src_filename} to {dest_filename}"
             )
 
-    def ensure_dir_exists(self, remote_directory: Path):
-        logger.debug(f"TransportRemoteWindows::ensure_dir_exists: check {remote_directory}")
+    def ensure_dir_exists(self, dest_directory: Path):
+        logger.debug(f"TransportRemoteWindows::ensure_dir_exists: check {dest_directory}")
         if self.dry_run:
-            logger.debug(f"TransportRemoteWindows::ensure_dir_exists: created {remote_directory}")
+            logger.debug(f"TransportRemoteWindows::ensure_dir_exists: created {dest_directory}")
             return
 
         try:
-            self.sftp.stat(str(remote_directory))
+            self.sftp.stat(str(dest_directory))
         except FileNotFoundError:
-            self.sftp.mkdir(str(remote_directory))
-            logger.debug(f"TransportRemoteWindows::ensure_dir_exists: created {remote_directory}")
+            self.sftp.mkdir(str(dest_directory))
+            logger.debug(f"TransportRemoteWindows::ensure_dir_exists: created {dest_directory}")
 
     def copy_files(
         self,
-        local_path: Path,
-        remote_path: Path,
+        src_path: Path,
+        dest_path: Path,
         whitelist: list,
         recursive: bool = False,
         callback=None,
     ):
-        guessed_len = self.guess_file_count(local_path, whitelist, recursive)
-        logger.debug(f"TransportRemoteWindows::copy_files: {local_path} -> {remote_path}")
+        guessed_len = self.guess_file_count(src_path, whitelist, recursive)
+        logger.debug(f"TransportRemoteWindows::copy_files: {src_path} -> {dest_path}")
         self.connect()
-        self.ensure_dir_exists(remote_path)
+        self.ensure_dir_exists(dest_path)
         cnt = 1
 
-        for _, local_filename in enumerate(local_path.iterdir()):
+        for _, src_filename in enumerate(src_path.iterdir()):
             logger.debug(
-                f"TransportRemoteWindows::copy_files: [{cnt}/{guessed_len}] {local_filename.name}"
+                f"TransportRemoteWindows::copy_files: [{cnt}/{guessed_len}] {src_filename.name}"
             )
             if callback:
                 callback()
-            remote_filename = remote_path / local_filename.name
+            dest_filename = dest_path / src_filename.name
 
-            if local_filename.is_dir():
+            if src_filename.is_dir():
                 if recursive:
                     self.copy_files(
-                        local_filename, remote_path / local_filename.name, whitelist, recursive
+                        src_filename, dest_path / src_filename.name, whitelist, recursive
                     )
                 else:
                     continue
@@ -347,36 +347,36 @@ class TransportRemoteWindows(TransportBaseWindows):
                 if whitelist:
                     match = False
                     for item in whitelist:
-                        if local_filename.suffix == item:
+                        if src_filename.suffix == item:
                             match = True
                             break
                     if not match:
                         logger.debug(
-                            f"TransportRemoteWindows::copy_files: not whitelist match {local_filename}"
+                            f"TransportRemoteWindows::copy_files: not whitelist match {src_filename}"
                         )
                         continue
 
                 if self.dry_run:
                     logger.debug(
-                        f"TransportRemoteWindows::copy_files: dry-run {local_filename} to {remote_filename}"
+                        f"TransportRemoteWindows::copy_files: dry-run {src_filename} to {dest_filename}"
                     )
                     continue
 
                 try:
-                    remote_file_attr = self.sftp.stat(str(remote_filename))
-                    local_file_attr = local_filename.stat()
+                    dest_file_attr = self.sftp.stat(str(dest_filename))
+                    src_file_attr = src_filename.stat()
                     if (
-                        int(local_file_attr.st_mtime) > int(remote_file_attr.st_mtime)
-                        or local_file_attr.st_size != remote_file_attr.st_size
+                        int(src_file_attr.st_mtime) > int(dest_file_attr.st_mtime)
+                        or src_file_attr.st_size != dest_file_attr.st_size
                     ):
-                        self.sftp.put(str(local_filename), str(remote_filename))
+                        self.sftp.put(str(src_filename), str(dest_filename))
                         logger.debug(
-                            f"TransportRemoteWindows::copy_files: newer/size {local_filename} to {remote_filename}"
+                            f"TransportRemoteWindows::copy_files: newer/size {src_filename} to {dest_filename}"
                         )
                 except FileNotFoundError:
-                    self.sftp.put(str(local_filename), str(remote_filename))
+                    self.sftp.put(str(src_filename), str(dest_filename))
                     logger.debug(
-                        f"TransportRemoteWindows::copy_files: create {local_filename} to {remote_filename}"
+                        f"TransportRemoteWindows::copy_files: create {src_filename} to {dest_filename}"
                     )
 
 
@@ -400,8 +400,8 @@ class BiosSync(GlobalJob):
     name = "BIOS"
 
     def setup(self):
-        self.src = Path(self.default.get("local_bios"))
-        self.dst = Path(self.default.get("remote_bios"))
+        self.src = Path(self.default.get("src_bios"))
+        self.dst = Path(self.default.get("dest_bios"))
         self.size = self.transport.guess_file_count(self.src, [], True)
 
     def do(self):
@@ -417,8 +417,8 @@ class ThumbnailsSync(BiosSync):
     name = "Thumbnails"
 
     def setup(self):
-        self.src = Path(self.default.get("local_thumbnails"))
-        self.dst = Path(self.default.get("remote_thumbnails"))
+        self.src = Path(self.default.get("src_thumbnails"))
+        self.dst = Path(self.default.get("dest_thumbnails"))
         self.size = self.transport.guess_file_count(self.src, [], True)
 
 
@@ -428,20 +428,20 @@ class FavoritesSync(BiosSync):
     def do(self):
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate(
-                Path(self.default.get("local_config")) / "content_favorites.lpl",
+                Path(self.default.get("src_config")) / "content_favorites.lpl",
                 temp_file,
             )
             self.transport.copy_file(
                 Path(temp_file.name),
-                Path(self.default.get("remote_config")) / "content_favorites.lpl",
+                Path(self.default.get("dest_config")) / "content_favorites.lpl",
             )
 
     def migrate(self, favorites_file, temp_file):
-        def find_playlist(playlists, core_name):
+        def find_playlist(playlists, src_core_name):
             for p in playlists:
-                if p.get("core_name") == core_name:
+                if p.get("src_core_name") == src_core_name:
                     return p
-            print(f"Can not find core {core_name}")
+            print(f"Can not find core {src_core_name}")
             raise AssertionError()
 
         logger.debug(f"migrate: filename={favorites_file}")
@@ -449,25 +449,25 @@ class FavoritesSync(BiosSync):
             data = json.load(file)
 
         items = []
-        local_items = data["items"]
-        local_items_len = len(local_items)
-        for idx, item in enumerate(local_items):
+        src_items = data["items"]
+        src_items_len = len(src_items)
+        for idx, item in enumerate(src_items):
             new_item = copy.copy(item)
             playlist = find_playlist(self.playlists, new_item["core_name"])
-            remote_rom_dir = Path(self.default.get("remote_roms")) / playlist.get("remote_folder")
-            local_path = new_item["path"].split("#")[0]
-            local_name = Path(local_path).name
-            new_path = remote_rom_dir / local_name
+            dest_rom_dir = Path(self.default.get("target_roms")) / playlist.get("dest_folder")
+            src_path = new_item["path"].split("#")[0]
+            src_name = Path(src_path).name
+            new_path = dest_rom_dir / src_name
             new_item["path"] = str(new_path)
             core_path = (
                 new_item["core_path"]
                 .replace(
-                    self.default.get("local_cores_suffix"), self.default.get("remote_cores_suffix")
+                    self.default.get("src_cores_suffix"), self.default.get("target_cores_suffix")
                 )
-                .replace(self.default.get("local_cores"), self.default.get("remote_cores"))
+                .replace(self.default.get("src_cores"), self.default.get("target_cores"))
             )
             new_item["core_path"] = core_path
-            logger.debug(f"migrate: Convert [{idx+1}/{local_items_len}] path={local_name}")
+            logger.debug(f"migrate: Convert [{idx+1}/{src_items_len}] path={src_name}")
             items.append(new_item)
 
         data["items"] = items
@@ -490,8 +490,8 @@ class RomSyncJob(SystemJob):
 
     def setup(self, playlist):
         self.playlist = playlist
-        self.src = Path(self.default.get("local_roms")) / self.playlist.get("local_folder")
-        self.dst = Path(self.default.get("remote_roms")) / self.playlist.get("remote_folder")
+        self.src = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
+        self.dst = Path(self.default.get("dest_roms")) / self.playlist.get("dest_folder")
         self.size = self.transport.guess_file_count(self.src, [], True)
 
     def do(self, callback):
@@ -510,34 +510,32 @@ class PlaylistSyncJob(SystemJob):
     def migrate_playlist(self, temp_file):
         name = self.playlist.get("name")
         logger.debug(f"migrate_playlist: name={name}")
-        local = Path(self.default.get("local_playlists")) / name
+        local = Path(self.default.get("src_playlists")) / name
         with open(local) as file:
             data = json.load(file)
 
         core_path = (
             data["default_core_path"]
-            .replace(
-                self.default.get("local_cores_suffix"), self.default.get("remote_cores_suffix")
-            )
-            .replace(self.default.get("local_cores"), self.default.get("remote_cores"))
+            .replace(self.default.get("src_cores_suffix"), self.default.get("target_cores_suffix"))
+            .replace(self.default.get("src_cores"), self.default.get("target_cores"))
         )
-        local_rom_dir = Path(self.default.get("local_roms")) / self.playlist.get("local_folder")
-        remote_rom_dir = Path(self.default.get("remote_roms")) / self.playlist.get("remote_folder")
+        src_rom_dir = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
+        target_rom_dir = Path(self.default.get("target_roms")) / self.playlist.get("dest_folder")
         data["default_core_path"] = core_path
-        data["scan_content_dir"] = str(remote_rom_dir)
+        data["scan_content_dir"] = str(target_rom_dir)
         data["scan_dat_file_path"] = ""
 
         items = []
-        local_items = data["items"]
-        local_items_len = len(local_items)
-        for idx, item in enumerate(local_items):
+        src_items = data["items"]
+        src_items_len = len(src_items)
+        for idx, item in enumerate(src_items):
             new_item = copy.copy(item)
             new_item["core_name"] = "DETECT"
             new_item["core_path"] = "DETECT"
-            local_path = new_item["path"].split("#")[0]
-            local_name = Path(local_path).name
-            logger.debug(f"migrate_playlist: Convert [{idx+1}/{local_items_len}] path={local_name}")
-            new_path = local_path.replace(str(local_rom_dir), str(remote_rom_dir))
+            src_path = new_item["path"].split("#")[0]
+            src_name = Path(src_path).name
+            logger.debug(f"migrate_playlist: Convert [{idx+1}/{src_items_len}] path={src_name}")
+            new_path = src_path.replace(str(src_rom_dir), str(target_rom_dir))
             new_item["path"] = new_path
             items.append(new_item)
 
@@ -553,7 +551,7 @@ class PlaylistSyncJob(SystemJob):
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate_playlist(temp_file)
             self.transport.copy_file(
-                Path(temp_file.name), Path(self.default.get("remote_playlists")) / name
+                Path(temp_file.name), Path(self.default.get("dest_playlists")) / name
             )
 
 
@@ -579,12 +577,12 @@ class PlaylistUpdatecJob(SystemJob):
         new_item["db_name"] = local.name
         return new_item
 
-    def create_m3u(self, local_rom_dir):
+    def create_m3u(self, src_rom_dir):
         logger.debug("create_m3u: Create m3u files")
-        m3u_pattern = self.playlist.get("local_m3u_pattern")
-        m3u_whitelist = self.playlist.get("local_m3u_whitelist")
+        m3u_pattern = self.playlist.get("src_m3u_pattern")
+        m3u_whitelist = self.playlist.get("src_m3u_whitelist")
         files = defaultdict(list)
-        all_files = Path(local_rom_dir)
+        all_files = Path(src_rom_dir)
         for filename in all_files.iterdir():
             if re.compile(m3u_whitelist).search(str(filename)):
                 e = re.compile(m3u_pattern)
@@ -595,18 +593,18 @@ class PlaylistUpdatecJob(SystemJob):
                     base_name = filename.stem
                 files[base_name].append(filename)
         for base_name, list_files in files.items():
-            m3u_file = Path(local_rom_dir) / f"{base_name}.m3u"
+            m3u_file = Path(src_rom_dir) / f"{base_name}.m3u"
             if not self.transport.dry_run:
                 with open(m3u_file, "w") as f:
                     logger.debug(f"create_m3u: Create  {str(m3u_file)}")
                     for filename in sorted(list_files):
                         f.write(f"{filename.name}\n")
 
-    def build_file_map(self, local_rom_dir, dat_file):
+    def build_file_map(self, src_rom_dir, dat_file):
         name_map = {}
         if not dat_file:
             return name_map
-        dat_file = local_rom_dir / dat_file
+        dat_file = src_rom_dir / dat_file
         with open(dat_file) as fd:
             data = fd.read()
         root = etree.fromstring(data)
@@ -626,30 +624,30 @@ class PlaylistUpdatecJob(SystemJob):
     def do(self, _callback):
         name = self.playlist.get("name")
         logger.debug(f"migrate_playlist: name={name}")
-        local = Path(self.default.get("local_playlists")) / name
+        local = Path(self.default.get("src_playlists")) / name
         if not self.transport.dry_run:
             self.backup_file(local)
 
         with open(local) as file:
             data = json.load(file)
 
-        local_rom_dir = Path(self.default.get("local_roms")) / self.playlist.get("local_folder")
+        src_rom_dir = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
 
-        core_path = Path(self.default.get("local_cores")) / self.playlist.get("core_path")
-        core_path = core_path.with_suffix(self.default.get("local_cores_suffix"))
+        core_path = Path(self.default.get("src_cores")) / self.playlist.get("src_core_path")
+        core_path = core_path.with_suffix(self.default.get("src_cores_suffix"))
         data["default_core_path"] = str(core_path)
-        data["default_core_name"] = self.playlist.get("core_name")
-        data["scan_content_dir"] = str(local_rom_dir)
-        data["scan_dat_file_path"] = str(local_rom_dir)
+        data["default_core_name"] = self.playlist.get("src_core_name")
+        data["scan_content_dir"] = str(src_rom_dir)
+        data["scan_dat_file_path"] = str(src_rom_dir)
 
-        if self.playlist.get("local_create_m3u"):
-            self.create_m3u(local_rom_dir)
+        if self.playlist.get("src_create_m3u"):
+            self.create_m3u(src_rom_dir)
 
-        whitelist = self.playlist.get("local_whitelist", False)
-        blacklist = self.playlist.get("local_blacklist", False)
-        self.name_map = self.build_file_map(local_rom_dir, self.playlist.get("local_dat_file", ""))
+        whitelist = self.playlist.get("src_whitelist", False)
+        blacklist = self.playlist.get("src_blacklist", False)
+        self.name_map = self.build_file_map(src_rom_dir, self.playlist.get("src_dat_file", ""))
         items = []
-        files = glob.glob(str(local_rom_dir / "*"))
+        files = glob.glob(str(src_rom_dir / "*"))
         files.sort()
         files_len = len(files)
 
@@ -703,7 +701,7 @@ def match_system(system_name, playlists):
             if playlist.get("disabled", False):
                 continue
             n1 = playlist.get("name")
-            n2 = playlist.get("remote_folder")
+            n2 = playlist.get("dest_folder")
             d1 = Levenshtein.distance(n1, system_name, weights=(1, 1, 2))
             d2 = Levenshtein.distance(n2, system_name, weights=(1, 1, 2))
             if d1 < dt1:
@@ -720,18 +718,17 @@ def match_system(system_name, playlists):
 
 def expand_config(default):
     for item in [
-        "local_playlists",
-        "local_bios",
-        "local_config",
-        "local_roms",
-        "local_cores",
-        "local_thumbnails",
-        "remote_playlists",
-        "remote_bios",
-        "remote_config",
-        "remote_roms",
-        "remote_cores",
-        "remote_thumbnails",
+        "src_playlists",
+        "src_bios",
+        "src_config",
+        "src_roms",
+        "src_cores",
+        "src_thumbnails",
+        "dest_playlists",
+        "dest_bios",
+        "dest_config",
+        "dest_roms",
+        "dest_thumbnails",
     ]:
         default[item] = str(Path(default.get(item)).expanduser())
     return default

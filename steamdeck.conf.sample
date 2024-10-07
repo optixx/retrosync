@@ -1,74 +1,78 @@
 [default]
+# Explain the method for copying data, whether it's local or remote.
 target = "remote"
 hostname = "192.168.1.100"
 username = "deck"
-password =  "<password>"
+password = "<password>"
 
-local_playlists = "~/Library/Application Support/RetroArch/playlists"
-local_bios = "~/Library/Application Support/RetroArch/system"
-local_config = "~/Library/Application Support/RetroArch/config/"
-local_roms = "~/Documents/Roms"
-local_cores = "~/Library/Application Support/RetroArch/cores"
-local_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
-local_cores_suffix = ".dylib"
+src_playlists = "~/Library/Application Support/RetroArch/playlists"
+src_bios = "~/Library/Application Support/RetroArch/system"
+src_config = "~/Library/Application Support/RetroArch/config/"
+src_roms = "~/Documents/Roms"
+src_cores = "~/Library/Application Support/RetroArch/cores"
+src_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
+src_cores_suffix = ".dylib"
 
-remote_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
-remote_bios = "/home/deck/Emulation/bios"
-remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/config"
-remote_roms = "/home/deck/Emulation/roms"
-remote_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
-remote_thumbnails = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/thumbnails"
-remote_cores_suffix = ".so"
+# Provide the specific location of the actual files
+dest_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
+dest_bios = "/home/deck/Emulation/bios"
+dest_roms = "/home/deck/Emulation/roms"
+dest_thumbnails = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/thumbnails"
+
+# Actual Destinations on the Target Device
+target_roms =  "/home/deck/Emulation/roms"
+target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
+target_cores_suffix = ".so"
+
 
 [[playlists]]
 name = "Atari - 2600.lpl"
-local_folder = "Atari - 2600"
-remote_folder = "atari2600"
-core_path =  "stella_libretro"
-core_name = "Atari - 2600 (Stella)"
-
+src_folder = "Atari - 2600"
+dest_folder = "atari2600"
+src_core_path = "stella_libretro"
+src_core_name = "Atari - 2600 (Stella)"
+dest_core_path = "stella_libretro"
+dest_core_name = "Atari - 2600 (Stella)"
 
 [[playlists]]
 name = "Atari - 7800.lpl"
-local_folder = "Atari - 7800"
-remote_folder = "atari7800"
-core_path =  "prosystem_libretro"
-core_name = "Atari - 7800 (ProSystem)"
+src_folder = "Atari - 7800"
+dest_folder = "atari7800"
+src_core_path = "prosystem_libretro"
+src_core_name = "Atari - 7800 (ProSystem)"
+dest_core_path = "prosystem_libretro"
+dest_core_name = "Atari - 7800 (ProSystem)"
 
 [[playlists]]
 name = "Sharp - X68000.lpl"
-local_folder = "Sharp - X68000"
+src_folder = "Sharp - X68000"
 # Make sure to include all zip files matching the "FD" pattern
-local_whitelist = '.*FD.*\.zip$'
-# Exculde all files that hint hard dsik images
-local_blacklist = '.*HD.*\.zip$'
-remote_folder = "x68000"
-core_path = "px68k_libretro"
-core_name = "Sharp - X68000 (PX68k)"
+src_whitelist = '.*FD.*\.zip$'
+# Exclude all files that hint hard disk images
+src_blacklist = '.*HD.*\.zip$'
+dest_folder = "x68000"
+src_core_path = "px68k_libretro"
+src_core_name = "Sharp - X68000 (PX68k)"
+dest_core_path = "px68k_libretro"
+dest_core_name = "Sharp - X68000 (PX68k)"
 disabled = false
 
 [[playlists]]
 name = "Commodore - Amiga.lpl"
-local_folder = "Commodore - Amiga"
+src_folder = "Commodore - Amiga"
 # Make sure to include all m3u list
-local_whitelist = '\.m3u$'
+src_whitelist = '\.m3u$'
 # Don't add single adf images
-local_blacklist = '\.adf$'
+src_blacklist = '\.adf$'
 # Create fresh m3u files while updating playlists
-local_create_m3u = true
+src_create_m3u = true
 # Only include adf images in m3u files
-local_m3u_whitelist = '\.adf$'
+src_m3u_whitelist = '\.adf$'
 # Normalizing pattern for files like "Agony (Disk 1 of 3).adf"
-local_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
-remote_folder = "amiga"
-core_path = "puae_libretro"
-core_name = "Commodore - Amiga (PUAE)"
+src_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
+dest_folder = "amiga"
+src_core_path = "puae_libretro"
+src_core_name = "Commodore - Amiga (PUAE)"
+dest_core_path = "puae_libretro"
+dest_core_name = "Commodore - Amiga (PUAE)"
 disabled = false
-
-[[playlists]]
-name = "FBNeo - Arcade Games.lpl"
-local_folder = "SNK - Neo Geo"
-local_dat_file = "FinalBurnNeo.dat"
-remote_folder = "neogeo"
-core_path  = "fbneo_libretro"
-core_name = "Arcade (FinalBurn Neo)"
