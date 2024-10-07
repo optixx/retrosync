@@ -80,7 +80,7 @@ class Transport:
             if force_transport == "unix":
                 return TransportBaseUnix.getInstance(default, dry_run)
             elif force_transport == "windows":
-                return TransportRemoteWindows(default, dry_run)
+                return TransportRemoteWindows.getInstance(default, dry_run)
             else:
                 raise NotImplementedError
 
@@ -88,7 +88,7 @@ class Transport:
         if current_platform in ["Darwin", "Linux"]:
             return TransportBaseUnix.getInstance(default, dry_run)
         elif current_platform in ["Windows"]:
-            return TransportRemoteWindows(default, dry_run)
+            return TransportRemoteWindows.getInstance(default, dry_run)
         else:
             print(
                 f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
@@ -249,6 +249,18 @@ class TransportLocalWindows(TransportBaseWindows):
         self.default = default
         self.dry_run = dry_run
         logger.debug(f"TransportLocalWindows::__ctor__: dry_run={self.dry_run}")
+
+    def check(self):
+        pass
+
+    def ensure_dir_exists(self, path_directory: Path):
+        if not self.dry_run:
+            path_directory.mkdir(parents=True)
+
+    def copy_file(self, src_filename: Path, dest_filename: Path):
+        self.ensure_dir_exists(dest_filename.parent)
+        if not self.dry_run:
+            shutil.copy(src_filename, dest_filename)
 
 
 class TransportRemoteWindows(TransportBaseWindows):
