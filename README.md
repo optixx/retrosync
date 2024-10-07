@@ -173,8 +173,8 @@ python retrosync.py --debug --sync-roms --sync-playlists --name "psx" --yes
 python retrosync.py --debug --update-playlists --name "psx"
 ```
 
- Synchronize your ROMs onto a locally attached SD card is possible:
+ Forcibly use the Windows Transport Module to avoid relying on locally installed shell commands such as 'scp' and 'rsync'.
 
 ```sh
-python retrosync.py --debug --sync-roms-local /Volumes/Steamdeck/roms
+python retrosync.py --debug --sync-playlists --name "psx" --transport-windows
 ```
