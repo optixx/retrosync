@@ -56,7 +56,7 @@ src_cores = "~/Library/Application Support/RetroArch/cores"
 src_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
 src_cores_suffix = ".dylib"
 
-# Provide the specific location of the actual files
+# Provide the specific location where to sync data to
 dest_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
 dest_bios = "/home/deck/Emulation/bios"
 dest_roms = "/home/deck/Emulation/roms"

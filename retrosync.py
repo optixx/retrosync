@@ -202,7 +202,8 @@ class TransportLocalUnix(TransportBaseUnix):
 
     def ensure_dir_exists(self, path_directory: Path):
         if not self.dry_run:
-            path_directory.mkdir(parents=True)
+            if not path_directory.is_dir():
+                path_directory.mkdir(parents=True)
 
     def copy_file(self, src_filename: Path, dest_filename: Path):
         self.ensure_dir_exists(dest_filename.parent)
@@ -255,7 +256,8 @@ class TransportLocalWindows(TransportBaseWindows):
 
     def ensure_dir_exists(self, path_directory: Path):
         if not self.dry_run:
-            path_directory.mkdir(parents=True)
+            if not path_directory.is_dir():
+                path_directory.mkdir(parents=True)
 
     def copy_file(self, src_filename: Path, dest_filename: Path):
         self.ensure_dir_exists(dest_filename.parent)
