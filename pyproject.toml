@@ -25,6 +25,7 @@ paramiko = "^3.5.0"
 
 [tool.poetry.group.test.dependencies]
 pytest = "^8.3.3"
+pytest-mock = "^3.14.0"
 
 [tool.poetry.group.dev.dependencies]
 ipython = "^8.25.0"
