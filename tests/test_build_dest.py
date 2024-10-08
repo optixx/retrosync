@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from retrosync import TransportRemoteUnix, TransportRemoteWindows
+from retrosync import TransportRemoteUnix
 
 
 @pytest.fixture
@@ -21,5 +21,5 @@ def dry_run():
 def test_build_dest_unix(default_config, dry_run):
     transport = TransportRemoteUnix(default_config, dry_run)
     path = Path("/some/path")
-    expected = f'"user@example.com:/some/path"'
+    expected = '"user@example.com:/some/path"'
     assert transport.build_dest(path) == expected
