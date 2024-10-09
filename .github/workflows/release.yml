@@ -122,7 +122,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.current_version }}
-          files: ./dist/retrosync-macos
+          files: ./dist/retrosync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -163,7 +163,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.current_version }}
-          files: ./dist/retrosync-linux
+          files: ./dist/retrosync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
