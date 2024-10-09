@@ -30,7 +30,6 @@ jobs:
             This release includes the following binaries:
             - Windows executable
             - macOS executable
-            - Linux executable
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Automatically provided by GitHub
 
