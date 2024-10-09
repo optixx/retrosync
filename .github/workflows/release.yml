@@ -110,7 +110,7 @@ jobs:
         id: get_version
         run: |
           current_version=$(cat VERSION)
-          echo "::set-output name=new_version::$current_version"
+          echo "::set-output name=current_version::$current_version"
 
       - name: Upload macOS Artifact
         uses: actions/upload-artifact@v3
