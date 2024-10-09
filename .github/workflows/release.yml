@@ -141,5 +141,6 @@ jobs:
         run: |
           git config --local user.email "david@optixx.org"
           git config --local user.name "David Voswinkel"
+          git add VERSION
           git commit -m "Bump version to ${{ steps.bump_version.outputs.new_version }}"
           git push
