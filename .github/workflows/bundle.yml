@@ -83,3 +83,48 @@ jobs:
         with:
           name: linux-executable
           path: ./dist/retrosync
+
+  create-release:
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-macos, build-linux]  # Wait for the build jobs to finish
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.0  # Change this to your desired versioning scheme
+          release_name: Release v1.0.0  # Change as needed
+          body: |
+            This release includes the following binaries:
+            - Windows executable
+            - macOS executable
+            - Linux executable
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # Automatically provided by GitHub
+
+      - name: Upload Windows executable
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.0
+          files: ./dist/retrosync.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload macOS executable
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.0
+          files: ./dist/retrosync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Linux executable
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v1.0.0
+          files: ./dist/retrosync
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
