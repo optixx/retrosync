@@ -1,4 +1,4 @@
-name: Create Release
+name: Build Executables
 
 on:
   workflow_dispatch:  # This allows the workflow to be triggered manually
