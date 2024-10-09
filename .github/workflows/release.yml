@@ -122,7 +122,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.current_version }}
-          files: ./dist/retrosync
+          files: ./dist/retrosync-macos
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -147,11 +147,25 @@ jobs:
       - name: Build executable
         run: pyinstaller --onefile retrosync.py
 
+      - name: Get Version
+        id: get_version
+        run: |
+          current_version=$(cat VERSION)
+          echo "::set-output name=current_version::$current_version"
+
       - name: Upload Linux Artifact
         uses: actions/upload-artifact@v3
         with:
           name: linux-executable
           path: ./dist/retrosync
+
+      - name: Upload Linux executable
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.get_version.outputs.current_version }}
+          files: ./dist/retrosync-linux
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
   # create-release:
