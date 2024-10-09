@@ -1,10 +1,8 @@
 name: Build Executables
 
 on:
-  push:
-    branches:
-      - main
-  pull_request:
+  workflow_dispatch:  # This allows the workflow to be triggered manually
+
 
 jobs:
   build-windows:
@@ -91,12 +89,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
+      - name: Update Version
+        id: bump_version
+        run: |
+          current_version=$(cat VERSION)
+          IFS='.' read -r major minor patch <<< "$current_version"
+          patch=$((patch + 1))
+          new_version="$major.$minor.$patch"
+          echo "$new_version" > VERSION
+          echo "::set-output name=new_version::$new_version"
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.0  # Change this to your desired versioning scheme
-          release_name: Release v1.0.0  # Change as needed
+          tag_name: ${{ steps.bump_version.outputs.new_version }}
+          release_name: Release ${{ steps.bump_version.outputs.new_version }}
           body: |
             This release includes the following binaries:
             - Windows executable
@@ -108,7 +116,7 @@ jobs:
       - name: Upload Windows executable
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.0
+          tag_name: ${{ steps.bump_version.outputs.new_version }}
           files: ./dist/retrosync.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -116,7 +124,7 @@ jobs:
       - name: Upload macOS executable
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.0
+          tag_name: ${{ steps.bump_version.outputs.new_version }}
           files: ./dist/retrosync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -124,7 +132,14 @@ jobs:
       - name: Upload Linux executable
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.0
+          tag_name: ${{ steps.bump_version.outputs.new_version }}
           files: ./dist/retrosync
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Commit Version Update
+        run: |
+          git config --local user.email "david@optixx.org"
+          git config --local user.name "David Voswinkel"
+          git commit -m "Bump version to ${{ steps.bump_version.outputs.new_version }}"
+          git push
