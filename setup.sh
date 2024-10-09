@@ -11,4 +11,4 @@ source venv/bin/activate
 echo "Installing required Python packages..."
 pip3 install -r requirements.txt
 
-echo "Setup complete.""
+echo "Setup complete."
