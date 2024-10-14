@@ -296,6 +296,7 @@ class TransportRemoteWindows(TransportBaseWindows):
         self.dry_run = dry_run
         self.ssh = paramiko.SSHClient()
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.sftp = None
         self.connected = False
         logger.debug(f"TransportRemoteWindows::__ctor__: dry_run={self.dry_run}")
 

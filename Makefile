@@ -17,7 +17,7 @@ pip: ## Install pip depencies
 install: homebrew bootstrap pip ## Install all depencies
 
 run-tests: ## Run tests
-	PYTHINPATH=. pytest tests/ -rP
+	PYTHONPATH=. pytest tests/ -rP
 
 check-ruff: ## Run ruff checks
 	ruff check --output-format=github .
