@@ -1,4 +1,3 @@
-import pytest
 from pathlib import Path
 from retrosync import expand_config
 
