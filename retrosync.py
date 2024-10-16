@@ -465,15 +465,20 @@ class ThumbnailsSync(BiosSync):
 class FavoritesSync(BiosSync):
     name = "Favorites"
 
+    def setup(self):
+        self.src = Path(self.default.get("src_config")) / "content_favorites.lpl"
+        self.dst = Path(self.default.get("dest_config")) / "content_favorites.lpl"
+        self.size = 1
+
     def do(self):
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate(
-                Path(self.default.get("src_config")) / "content_favorites.lpl",
+                self.src,
                 temp_file,
             )
             self.transport.copy_file(
                 Path(temp_file.name),
-                Path(self.default.get("dest_config")) / "content_favorites.lpl",
+                self.dst,
             )
 
     def migrate(self, favorites_file, temp_file):

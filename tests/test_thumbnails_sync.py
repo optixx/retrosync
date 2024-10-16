@@ -9,9 +9,20 @@ def default_config():
         "hostname": "example.com",
         "username": "user",
         "password": "password",
-        "target": "remote",
-        "src_thumbnails": "/local/thumbnails",
-        "dest_thumbnails": "/remote/thumbnails",
+        "src_playlists": "tests/assets/playlists",
+        "src_bios": "tests/assets/bios",
+        "src_config": "tests/assets/config",
+        "src_roms": "tests/assets/roms",
+        "src_cores": "",
+        "src_thumbnails": "tests/assets/thumbnails",
+        "src_cores_suffix": ".dylib",
+        "dest_playlists": "",
+        "dest_bios": "tests/assets/bios",
+        "dest_config": "tests/assets/config",
+        "dest_roms": "",
+        "dest_cores": "",
+        "dest_thumbnails": "tests/assets/thumbnails",
+        "dest_cores_suffix": ".so",
     }
 
 
@@ -33,15 +44,15 @@ def playlists():
 
 @pytest.fixture
 def dry_run():
-    return True
+    return False
 
 
 def test_thumbnails_sync_setup(default_config, playlists, dry_run):
     transport = TransportRemoteUnix(default_config, dry_run)
     thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
     thumbnails_sync.setup()
-    assert thumbnails_sync.src == Path("/local/thumbnails")
-    assert thumbnails_sync.dst == Path("/remote/thumbnails")
+    assert thumbnails_sync.src == Path("tests/assets/thumbnails")
+    assert thumbnails_sync.dst == Path("tests/assets/thumbnails")
     assert thumbnails_sync.size == transport.guess_file_count(thumbnails_sync.src, [], True)
 
 

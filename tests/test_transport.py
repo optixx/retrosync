@@ -1,3 +1,4 @@
+from time import strftime
 import pytest
 from pathlib import Path
 from unittest.mock import patch, Mock
@@ -18,8 +19,8 @@ def default_config():
         "hostname": "localhost",
         "username": "user",
         "password": "password",
-        "src_bios": "~/src_bios",
-        "dest_bios": "~/dest_bios",
+        "src_bios": "tests/assets/bios",
+        "dest_bios": "tests/assets/bios",
     }
 
 
@@ -54,8 +55,8 @@ def test_transport_windows_remote(default_config, dry_run):
 
 def test_transport_unix_local_copy_file(default_config, dry_run):
     transport = TransportLocalUnix(default_config, dry_run)
-    src = Path("/tmp/src_file")
-    dest = Path("/tmp/dest_file")
+    src = Path("tests/assets/bios")
+    dest = Path("tests/assets/bios")
     with patch("shutil.copy") as mock_copy:
         transport.copy_file(src, dest)
         mock_copy.assert_called_once_with(src, dest)
@@ -64,8 +65,8 @@ def test_transport_unix_local_copy_file(default_config, dry_run):
 def test_transport_unix_remote_copy_file(default_config, dry_run):
     default_config["target"] = "remote"
     transport = TransportRemoteUnix(default_config, dry_run)
-    src = Path("/tmp/src_file")
-    dest = Path("/tmp/dest_file")
+    src = Path("tests/assets/bios")
+    dest = Path("tests/assets/bios")
     with patch.object(transport, "execute") as mock_execute:
         transport.copy_file(src, dest)
         mock_execute.assert_called_once()
@@ -73,8 +74,8 @@ def test_transport_unix_remote_copy_file(default_config, dry_run):
 
 def test_transport_windows_local_copy_file(default_config, dry_run):
     transport = TransportLocalWindows(default_config, dry_run)
-    src = Path("C:/tmp/src_file")
-    dest = Path("C:/tmp/dest_file")
+    src = Path("tests/assets/bios")
+    dest = Path("tests/assets/bios")
     with patch("shutil.copy") as mock_copy:
         transport.copy_file(src, dest)
         mock_copy.assert_called_once_with(src, dest)
@@ -91,13 +92,12 @@ def test_transport_windows_remote_connect(default_config, dry_run):
 
 def test_transport_windows_remote_copy_file(default_config, dry_run):
     transport = TransportRemoteWindows(default_config, dry_run)
-    src = Path("C:/tmp/src_file")
-    dest = Path("C:/tmp/dest_file")
+    src = Path("tests/assets/bios")
+    dest = Path("tests/assets/bios")
     transport.connected = True
     transport.sftp = Mock()
     transport.sftp.put = True
-    with (
-        patch.object(transport.sftp, "put") as mock_put,
-    ):
+
+    with patch.object(transport.sftp, "put") as mock_put, patch.object(transport.sftp, "stat"):
         transport.copy_file(src, dest)
         mock_put.assert_called_once_with(str(src), str(dest))
