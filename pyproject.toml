@@ -92,4 +92,3 @@ test = "python -m pytest tests --random-order"
 static-checks.sequence = ["lint", "check-format", "mypy"]
 static-checks.ignore_fail = "return_non_zero"
 serve-docs = "mkdocs serve"
-
