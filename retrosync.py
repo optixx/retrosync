@@ -738,26 +738,34 @@ class PlaylistUpdatecJob(SystemJob):
 
 def match_system(system_name, playlists):
     if system_name:
+        needle = system_name.lower()
         dt1 = 1_000
         dt1_name = None
         dt2 = 1_000
         dt2_name = None
         for playlist in playlists:
             if playlist.get("disabled", False):
+                logger.debug("disabled")
                 continue
-            n1 = playlist.get("name")
-            n2 = playlist.get("dest_folder")
-            d1 = Levenshtein.distance(n1, system_name, weights=(1, 1, 2))
-            d2 = Levenshtein.distance(n2, system_name, weights=(1, 1, 2))
-            if d1 < dt1:
+            playlist_name = playlist.get("name")
+            n1 = playlist_name.lower()
+            n2 = playlist.get("dest_folder").lower()
+            d1 = Levenshtein.distance(n1, needle, weights=(1, 1, 2))
+            d2 = Levenshtein.distance(n2, needle, weights=(1, 1, 2))
+            logger.debug(f"system: {system_name} {n1}:{d1}   {n2}:{d2}")
+            if d1 < dt1 and d1 < len(playlist_name):
+                logger.debug(f"set d1: {d1}  {playlist_name}")
                 dt1 = d1
-                dt1_name = n1
-            if d2 < dt2:
+                dt1_name = playlist_name
+            if d2 < dt2 and d2 < len(playlist_name):
+                logger.debug(f"set d2: {d2}  {playlist_name}")
                 dt2 = d2
-                dt2_name = n1
+                dt2_name = playlist_name
         if dt1 < dt2:
+            logger.debug(f"return dt1 {dt1_name}")
             return dt1_name
         else:
+            logger.debug(f"return dt2 {dt2_name}")
             return dt2_name
 
 
