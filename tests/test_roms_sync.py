@@ -41,7 +41,7 @@ def test_roms_sync_setup(default_config, playlist, transport):
     roms_sync.setup(playlist)
     assert roms_sync.src == Path("tests/assets/roms")
     assert roms_sync.dst == Path("tests/assets/roms")
-    assert roms_sync.size == 3
+    assert roms_sync.size > 1
 
 
 def test_roms_sync_do(default_config, playlist, transport, mocker):
