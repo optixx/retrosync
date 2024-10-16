@@ -1,4 +1,3 @@
-from time import strftime
 import pytest
 from pathlib import Path
 from unittest.mock import patch, Mock

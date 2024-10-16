@@ -1,4 +1,3 @@
-from subprocess import call
 import pytest
 from pathlib import Path
 from retrosync import RomSyncJob, TransportRemoteUnix
