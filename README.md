@@ -178,3 +178,32 @@ python retrosync.py --debug --update-playlists --name "psx"
 ```sh
 python retrosync.py --debug --sync-playlists --name "psx" --transport-windows
 ```
+
+## Installing
+
+To install Retrosync, follow these steps (detailed steps are also available in the `setup.sh` for Unix-based systems and `setup.bat` for Windows systems):
+
+1. **Clone the Repository**: First, clone the Retrosync repository to your local machine.
+    ```sh
+    git clone https://github.com/optixx/retrosync.git
+    cd retrosync
+    ```
+
+2. **Set Up Virtual Environment**: It's recommended to use a virtual environment to manage dependencies. You can create and activate a virtual environment using the following commands:
+    ```sh
+    python3 -m venv venv
+    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    ```
+
+3. **Install Dependencies**: Install the dependencies using the included Makefile, which utilizes [UV](https://github.com/astral-sh/uv) to install the dependencies into the virtual environment.
+    ```sh
+     pip install --no-deps -r requirements.txt
+    ```
+
+4. **Configuration**: By default, the `steamdeck.toml` configuration file is employed. You can alter the configuration file by utilizing the command switch `--config-file` to specify an alternate filename.
+
+After completing these steps, Retrosync should be installed and ready to use.
+
+## Bundled Binaries
+
+For users who cannot set up a Python environment, bundled binaries of the script are available for download in the [GitHub releases](https://github.com/optixx/retrosync/releases).
