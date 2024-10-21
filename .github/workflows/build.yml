@@ -24,6 +24,11 @@ jobs:
       - name: Build executable
         run: pyinstaller --onefile retrosync.py
 
+      - name: Create zip
+        shell: powershell
+        run: |
+          powershell Compress-Archive -Path './dist/*' -DestinationPath './retrosync-windows-x64-release.zip'
+
       - name: Get Version
         id: get_version
         shell: powershell
@@ -35,13 +40,13 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: windows-executable
-          path: ./dist/retrosync.exe
+          path: ./retrosync-windows-x64-release.zip
 
       - name: Upload Windows executable
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.file_content }}
-          files: ./dist/retrosync.exe
+          files: ./retrosync-windows-x64-release.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -65,6 +70,9 @@ jobs:
       - name: Build executable
         run: pyinstaller --onefile retrosync.py
 
+      - name: Create zip
+        run: zip -r ./retrosync-macos-release.zip ./dist/retrosync
+
       - name: Get Version
         id: get_version
         run: |
@@ -75,12 +83,12 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: macos-executable
-          path: ./dist/retrosync
+          path: ./retrosync-macos-release.zip
 
       - name: Upload macOS executable
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ steps.get_version.outputs.current_version }}
-          files: ./dist/retrosync
+          files: ./retrosync-macos-release.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
