@@ -565,6 +565,7 @@ class PlaylistSyncJob(SystemJob):
             .replace(self.default.get("src_cores"), self.default.get("target_cores"))
         )
         src_rom_dir = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
+        src_rom_alt_dir = Path(self.default.get("src_roms_alt")) / self.playlist.get("src_folder")
         target_rom_dir = Path(self.default.get("target_roms")) / self.playlist.get("dest_folder")
         data["default_core_path"] = core_path
         data["scan_content_dir"] = str(target_rom_dir)
@@ -581,6 +582,7 @@ class PlaylistSyncJob(SystemJob):
             src_name = Path(src_path).name
             logger.debug(f"migrate_playlist: Convert [{idx+1}/{src_items_len}] path={src_name}")
             new_path = src_path.replace(str(src_rom_dir), str(target_rom_dir))
+            new_path = new_path.replace(str(src_rom_alt_dir), str(target_rom_dir))
             new_item["path"] = new_path
             items.append(new_item)
 
@@ -775,6 +777,7 @@ def expand_config(default):
         "src_bios",
         "src_config",
         "src_roms",
+        "src_roms_alt",
         "src_cores",
         "src_thumbnails",
         "dest_playlists",

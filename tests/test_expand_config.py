@@ -8,6 +8,7 @@ def test_expand_config():
         "src_bios": "~/bios",
         "src_config": "~/config",
         "src_roms": "~/roms",
+        "src_roms_alt": "~/roms",
         "src_cores": "~/cores",
         "src_thumbnails": "~/thumbnails",
         "dest_playlists": "~/dest_playlists",
