@@ -133,7 +133,7 @@ class TransportBaseUnix(TransportBase):
         self.default = default
         self.dry_run = dry_run
         logger.debug(
-            f"TransportBaseUnix::__ctor__: dry_run={self.dry_run} target={default.get("target")}"
+            f"TransportBaseUnix::__ctor__: dry_run={self.dry_run} target={default.get('target')}"
         )
         self.check()
 
@@ -518,7 +518,7 @@ class FavoritesSync(BiosSync):
                 .replace(self.default.get("src_cores"), self.default.get("target_cores"))
             )
             new_item["core_path"] = core_path
-            logger.debug(f"migrate: Convert [{idx+1}/{src_items_len}] path={src_name}")
+            logger.debug(f"migrate: Convert [{idx + 1}/{src_items_len}] path={src_name}")
             items.append(new_item)
 
         data["items"] = items
@@ -586,7 +586,7 @@ class PlaylistSyncJob(SystemJob):
             new_item["core_path"] = "DETECT"
             src_path = new_item["path"].split("#")[0]
             src_name = Path(src_path).name
-            logger.debug(f"migrate_playlist: Convert [{idx+1}/{src_items_len}] path={src_name}")
+            logger.debug(f"migrate_playlist: Convert [{idx + 1}/{src_items_len}] path={src_name}")
             new_path = src_path.replace(str(src_rom_dir), str(target_rom_dir))
             new_path = new_path.replace(str(src_rom_alt_dir), str(target_rom_dir))
             new_item["path"] = new_path
@@ -708,7 +708,7 @@ class PlaylistUpdatecJob(SystemJob):
         # First Pass
         for idx, file in enumerate(files):
             logger.debug(
-                f"update_playlist: Update first pass [{idx+1}/{files_len}] path={Path(file).name}"
+                f"update_playlist: Update first pass [{idx + 1}/{files_len}] path={Path(file).name}"
             )
             if Path(file).is_dir():
                 subs = glob.glob(str(Path(file) / "*"))
@@ -721,7 +721,7 @@ class PlaylistUpdatecJob(SystemJob):
         files_len = len(file_list)
         for idx, file in enumerate(file_list):
             logger.debug(
-                f"update_playlist: Update second pass [{idx+1}/{files_len}] path={Path(file).name}"
+                f"update_playlist: Update second pass [{idx + 1}/{files_len}] path={Path(file).name}"
             )
 
             if blacklist:
@@ -1028,8 +1028,8 @@ def main(
 
                     job.setup(playlist)
                     job.do(
-                        lambda system_steps_task_id=system_steps_task_id: system_steps_progress.update(
-                            system_steps_task_id, advance=1
+                        lambda system_steps_task_id=system_steps_task_id: (
+                            system_steps_progress.update(system_steps_task_id, advance=1)
                         )
                     )
 

@@ -2,5 +2,6 @@ __pycache__
 .DS_Store
 debug.log
 steamdeck.conf
+iphone.conf
 ipad.conf
 *.code-workspace
