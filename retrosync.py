@@ -76,10 +76,16 @@ progress_group = Group(
 
 class Transport:
     def __new__(cls, default, dry_run, force_transport):
-        if force_transport:
-            if force_transport == "unix":
+        normalized_force_transport = (
+            str(force_transport).strip().lower() if force_transport is not None else None
+        )
+        if normalized_force_transport in (None, "", "false"):
+            normalized_force_transport = None
+
+        if normalized_force_transport:
+            if normalized_force_transport == "unix":
                 return TransportBaseUnix.getInstance(default, dry_run)
-            elif force_transport == "windows":
+            elif normalized_force_transport == "windows":
                 return TransportRemoteWindows.getInstance(default, dry_run)
             else:
                 raise NotImplementedError
@@ -906,6 +912,19 @@ def main(
             do_update_playlists
         ) = True
 
+    if not any(
+        [
+            do_sync_playlists,
+            do_sync_roms,
+            do_sync_bios,
+            do_sync_favorites,
+            do_sync_thumbails,
+            do_update_playlists,
+        ]
+    ):
+        click.echo(click.get_current_context().get_help())
+        sys.exit(0)
+
     config = toml.load(config_file)
     default = expand_config(config.get("default"))
     playlists = config.get("playlists", [])
@@ -940,18 +959,6 @@ def main(
         playlists = [p for p in config.get("playlists", []) if p.get("name") == system_name]
     else:
         playlists = config.get("playlists", [])
-
-    if not any(
-        [
-            do_sync_playlists,
-            do_sync_roms,
-            do_sync_bios,
-            do_sync_favorites,
-            do_sync_thumbails,
-            do_update_playlists,
-        ]
-    ):
-        sys.exit(1)
 
     systems = {}
     for _, playlist in enumerate(playlists):

@@ -190,15 +190,15 @@ To install Retrosync, follow these steps (detailed steps are also available in t
     cd retrosync
     ```
 
-2. **Set Up Virtual Environment**: It's recommended to use a virtual environment to manage dependencies. You can create and activate a virtual environment using the following commands:
+2. **Set Up Virtual Environment**: Install [uv](https://github.com/astral-sh/uv), then create and activate a Python 3.12 virtual environment:
     ```sh
-    python3 -m venv venv
-    source venv/bin/activate  # On Windows use `venv\Scripts\activate`
+    uv venv --python 3.12
+    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
     ```
 
-3. **Install Dependencies**: Install the dependencies using the included Makefile, which utilizes [UV](https://github.com/astral-sh/uv) to install the dependencies into the virtual environment.
+3. **Install Dependencies**: Sync project dependencies and development tools from `pyproject.toml`:
     ```sh
-     pip install --no-deps -r requirements.txt
+    uv sync --all-groups --python 3.12
     ```
 
 4. **Configuration**: By default, the `steamdeck.toml` configuration file is employed. You can alter the configuration file by utilizing the command switch `--config-file` to specify an alternate filename.

@@ -1,14 +1,14 @@
 #!/bin/bash
 
-if ! command -v python3 &>/dev/null; then
-  echo "Python is not installed. Please install Python and try again."
+if ! command -v uv &>/dev/null; then
+  echo "uv is not installed. Please install uv and try again."
   exit 1
 fi
 
-python3 -m venv venv
+uv venv --python 3.12
+source .venv/bin/activate
 
-source venv/bin/activate
-echo "Installing required Python packages..."
-pip3 install -r requirements.txt
+echo "Installing required Python packages with uv..."
+uv sync --all-groups --python 3.12
 
 echo "Setup complete."

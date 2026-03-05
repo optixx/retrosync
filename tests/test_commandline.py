@@ -17,6 +17,11 @@ def test_help():
     assert "Usage: retrosync.py" in output
 
 
+def test_no_args_prints_help():
+    output = run_cli_tool(["retrosync.py"])
+    assert "Usage: retrosync.py" in output
+
+
 def test_prompt():
     try:
         run_cli_tool(
