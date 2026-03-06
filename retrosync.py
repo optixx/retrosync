@@ -1610,10 +1610,7 @@ def main(
             idx,
             job,
         ) in enumerate(jobs):
-            top_descr = "[bold #AAAAAA](%d out of %d jobs done)" % (
-                idx,
-                len(jobs),
-            )
+            top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
             overall_progress.update(overall_task_id, description=top_descr)
             current_task_id = current_system_progress.add_task(f"Run job {job.name}")
             system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
@@ -1642,10 +1639,7 @@ def main(
                 name = systems[key]["name"]
                 playlist = systems[key]["playlist"]
                 logger.info("main: Process %s", playlist.get("name"))
-                top_descr = "[bold #AAAAAA](%d out of %d systems synced)" % (
-                    idx,
-                    len(systems),
-                )
+                top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
                 overall_progress.update(overall_task_id, description=top_descr)
                 current_task_id = current_system_progress.add_task(f"Syncing system {name}")
 
