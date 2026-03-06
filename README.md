@@ -49,8 +49,8 @@ In this sample configuration, a setup is provided for your local desktop's Retro
 ```toml
 
 [default]
-# Explain the method for copying data, whether it's local or remote.
-transport = "remote"
+# Select transport mode: filesystem, ssh, or localsend (draft).
+transport = "ssh"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Documents/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]

@@ -1,5 +1,5 @@
 [default]
-transport = "local"
+transport = "filesystem"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Dropbox/Software/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
