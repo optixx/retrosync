@@ -76,8 +76,6 @@ src_folder = "Atari - 2600"
 dest_folder = "atari2600"
 src_core_path = "stella_libretro"
 src_core_name = "Atari - 2600 (Stella)"
-dest_core_path = "stella_libretro"
-dest_core_name = "Atari - 2600 (Stella)"
 
 [[playlists]]
 name = "Atari - 7800.lpl"
@@ -85,8 +83,6 @@ src_folder = "Atari - 7800"
 dest_folder = "atari7800"
 src_core_path = "prosystem_libretro"
 src_core_name = "Atari - 7800 (ProSystem)"
-dest_core_path = "prosystem_libretro"
-dest_core_name = "Atari - 7800 (ProSystem)"
 
 [[playlists]]
 name = "Sharp - X68000.lpl"
@@ -98,8 +94,6 @@ src_blacklist = '.*HD.*\.zip$'
 dest_folder = "x68000"
 src_core_path = "px68k_libretro"
 src_core_name = "Sharp - X68000 (PX68k)"
-dest_core_path = "px68k_libretro"
-dest_core_name = "Sharp - X68000 (PX68k)"
 disabled = false
 
 [[playlists]]
@@ -118,8 +112,6 @@ src_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
 dest_folder = "amiga"
 src_core_path = "puae_libretro"
 src_core_name = "Commodore - Amiga (PUAE)"
-dest_core_path = "puae_libretro"
-dest_core_name = "Commodore - Amiga (PUAE)"
 disabled = false
 
 ```
