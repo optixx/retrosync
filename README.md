@@ -50,10 +50,7 @@ In this sample configuration, a setup is provided for your local desktop's Retro
 
 [default]
 # Explain the method for copying data, whether it's local or remote.
-target = "remote"
-hostname = "192.168.1.100"
-username = "deck"
-password = "<password>"
+transport = "remote"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Documents/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
@@ -61,6 +58,7 @@ src_cores_suffix = ".dylib"
 
 # Provide the specific location where to sync data to
 dest_retroarch_base = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch"
+# Optional override: if omitted, dest_bios defaults to "<dest_retroarch_base>/system"
 dest_bios = "/home/deck/Emulation/bios"
 dest_roms = "/home/deck/Emulation/roms"
 
@@ -68,6 +66,11 @@ dest_roms = "/home/deck/Emulation/roms"
 target_roms =  "/home/deck/Emulation/roms"
 target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 target_cores_suffix = ".so"
+
+[remote]
+hostname = "192.168.1.100"
+username = "deck"
+password = "<password>"
 
 
 [[playlists]]
@@ -85,6 +88,13 @@ src_core_path = "prosystem_libretro"
 src_core_name = "Atari - 7800 (ProSystem)"
 
 [[playlists]]
+name = "Nintendo - Game Boy Advance.lpl"
+src_folder = "Nintendo - Game Boy Advance"
+# dest_folder omitted -> defaults to src_folder
+src_core_path = "mgba_libretro"
+src_core_name = "Nintendo - Game Boy Advance (mGBA)"
+
+[[playlists]]
 name = "Sharp - X68000.lpl"
 src_folder = "Sharp - X68000"
 # Make sure to include all zip files matching the "FD" pattern
@@ -94,7 +104,6 @@ src_blacklist = '.*HD.*\.zip$'
 dest_folder = "x68000"
 src_core_path = "px68k_libretro"
 src_core_name = "Sharp - X68000 (PX68k)"
-disabled = false
 
 [[playlists]]
 name = "Commodore - Amiga.lpl"
@@ -112,9 +121,13 @@ src_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
 dest_folder = "amiga"
 src_core_path = "puae_libretro"
 src_core_name = "Commodore - Amiga (PUAE)"
-disabled = false
 
 ```
+
+Notes:
+- `dest_folder` is optional. If omitted, Retrosync uses `src_folder`.
+- Use `dest_folder` only when target folder names differ (for example Steam Deck short names like `psx`, `gba`).
+- `dest_bios` is optional. If omitted, it defaults to `<dest_retroarch_base>/system`.
 
 ## Usage
 

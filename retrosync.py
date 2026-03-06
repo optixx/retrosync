@@ -851,6 +851,13 @@ def normalize_transport_config(config):
     return default
 
 
+def normalize_playlists(playlists):
+    for playlist in playlists:
+        if playlist.get("dest_folder") is None:
+            playlist["dest_folder"] = playlist.get("src_folder")
+    return playlists
+
+
 @click.command()
 @click.option(
     "--all",
@@ -982,7 +989,7 @@ def main(
 
     config = toml.load(config_file)
     default = expand_config(normalize_transport_config(config))
-    playlists = config.get("playlists", [])
+    playlists = normalize_playlists(config.get("playlists", []))
     if system_name:
         system_name = match_system(system_name, playlists)
         if not yes:
@@ -1011,9 +1018,7 @@ def main(
         system_jobs.append(RomSyncJob(default, transport))
 
     if system_name:
-        playlists = [p for p in config.get("playlists", []) if p.get("name") == system_name]
-    else:
-        playlists = config.get("playlists", [])
+        playlists = [p for p in playlists if p.get("name") == system_name]
 
     systems = {}
     for _, playlist in enumerate(playlists):
