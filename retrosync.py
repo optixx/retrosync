@@ -833,6 +833,25 @@ def rank_system_matches(system_name, playlists, limit=8):
 
 
 def expand_config(default):
+    def apply_core_flavor_defaults():
+        src_flavor = str(default.get("src_flavor", "")).strip().lower()
+        target_flavor = str(default.get("target_flavor", "")).strip().lower()
+
+        src_suffix_by_flavor = {
+            "apple": ".dylib",
+            "linux": ".so",
+        }
+        target_suffix_by_flavor = {
+            "apple": ".framework",
+            "linux": ".so",
+        }
+
+        if default.get("src_cores_suffix") is None and src_flavor in src_suffix_by_flavor:
+            default["src_cores_suffix"] = src_suffix_by_flavor[src_flavor]
+
+        if default.get("target_cores_suffix") is None and target_flavor in target_suffix_by_flavor:
+            default["target_cores_suffix"] = target_suffix_by_flavor[target_flavor]
+
     def ensure_retroarch_paths(prefix):
         base_key = f"{prefix}_retroarch_base"
         base = default.get(base_key)
@@ -854,6 +873,7 @@ def expand_config(default):
 
     ensure_retroarch_paths("src")
     ensure_retroarch_paths("dest")
+    apply_core_flavor_defaults()
 
     src_roms = default.get("src_roms")
     if isinstance(src_roms, list):

@@ -3,14 +3,14 @@ transport = "local"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Dropbox/Software/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
-src_cores_suffix = ".dylib"
+src_flavor = "apple"
 
 dest_retroarch_base = "~/Downloads/ipad/Retroach"
 dest_roms = "~/Downloads/ipad/Roms"
 
 target_roms =  "~/Documents/Roms"
 target_cores = "/Frameworks"
-target_cores_suffix = ".framework"
+target_flavor = "apple"
 
 [remote]
 hostname = ""

@@ -4,7 +4,7 @@ transport = "remote"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Documents/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
-src_cores_suffix = ".dylib"
+src_flavor = "apple"
 
 # Provide the specific location of the actual files
 dest_retroarch_base = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch"
@@ -14,7 +14,7 @@ dest_roms = "/home/deck/Emulation/roms"
 # Actual Destinations on the Target Device
 target_roms =  "/home/deck/Emulation/roms"
 target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
-target_cores_suffix = ".so"
+target_flavor = "linux"
 
 [remote]
 hostname = "192.168.1.100"
