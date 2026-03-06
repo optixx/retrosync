@@ -313,6 +313,7 @@ class TransportWindowsBase(TransportBase):
 class TransportLocalSend(TransportBase):
     DEFAULT_PORT = 53317
     DEFAULT_MULTICAST_ADDR = "224.0.0.167"
+    PREPARE_CHUNK_SIZE = 200
 
     def __init__(self, default, dry_run):
         self.default = default
@@ -609,11 +610,60 @@ class TransportLocalSend(TransportBase):
         if not session_id or not token:
             raise RuntimeError(f"Invalid prepare-upload response for '{src_filename.name}'")
 
+        self._upload_file_with_token(base_url, session_id, file_id, token, src_filename)
+
+    def _upload_file_with_token(self, base_url, session_id, file_id, token, src_filename: Path):
         with open(src_filename, "rb") as fd:
             binary = fd.read()
-
         query = urllib.parse.urlencode({"sessionId": session_id, "fileId": file_id, "token": token})
         self._http_binary("POST", f"{base_url}/api/localsend/v2/upload?{query}", binary=binary)
+
+    def _prepare_many(self, base_url, file_items):
+        records = []
+        files = {}
+        for src_filename, dest_filename in file_items:
+            file_id = str(uuid.uuid4())
+            upload_name = self._build_upload_name(dest_filename)
+            mime_type = mimetypes.guess_type(upload_name)[0] or "application/octet-stream"
+            files[file_id] = {
+                "id": file_id,
+                "fileName": upload_name,
+                "size": src_filename.stat().st_size,
+                "fileType": mime_type,
+            }
+            records.append((file_id, src_filename))
+
+        prepare_body = {"info": self.sender_info, "files": files}
+        prepare = self._http_json(
+            "POST",
+            f"{base_url}/api/localsend/v2/prepare-upload",
+            body=prepare_body,
+        )
+        session_id = prepare.get("sessionId")
+        token_map = prepare.get("files") or {}
+        if not session_id or not isinstance(token_map, dict):
+            raise RuntimeError("Invalid prepare-upload response for batch upload")
+        return session_id, token_map, records
+
+    def _upload_many(self, base_url, file_items, callback=None):
+        if not file_items:
+            return
+        chunks = [
+            file_items[idx : idx + self.PREPARE_CHUNK_SIZE]
+            for idx in range(0, len(file_items), self.PREPARE_CHUNK_SIZE)
+        ]
+
+        for chunk_idx, chunk in enumerate(chunks, start=1):
+            self._status(f"batch preparing chunk {chunk_idx}/{len(chunks)} ({len(chunk)} files)")
+            session_id, token_map, records = self._prepare_many(base_url, chunk)
+
+            for file_id, src_filename in records:
+                token = token_map.get(file_id)
+                if not token:
+                    raise RuntimeError(f"Missing upload token for '{src_filename.name}'")
+                self._upload_file_with_token(base_url, session_id, file_id, token, src_filename)
+                if callback:
+                    callback()
 
     def copy_file(self, src_filename: Path, dest_filename: Path):
         if self.dry_run:
@@ -644,6 +694,7 @@ class TransportLocalSend(TransportBase):
         else:
             generator = src_path.glob("*")
 
+        file_items = []
         for src_filename in generator:
             if src_filename.is_dir():
                 continue
@@ -658,10 +709,19 @@ class TransportLocalSend(TransportBase):
                         break
                 if not matched:
                     continue
+            dest_filename = dest_path / rel
+            file_items.append((src_filename, dest_filename))
+
+        # Fast path: for recursive bulk sync without whitelist, use batched prepare-upload.
+        if recursive and not whitelist:
+            self._status(f"starting batch upload ({len(file_items)} files)")
+            self._upload_many(base_url, file_items, callback=callback)
+            return
+
+        for src_filename, dest_filename in file_items:
+            self._upload_one(base_url, src_filename, dest_filename)
             if callback:
                 callback()
-            dest_filename = dest_path / rel
-            self._upload_one(base_url, src_filename, dest_filename)
 
     def ensure_dir_exists(self, path_directory: Path):
         return
