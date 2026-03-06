@@ -758,37 +758,78 @@ class PlaylistUpdatecJob(SystemJob):
                 new_file.write(doc)
 
 
-def match_system(system_name, playlists):
-    if system_name:
-        needle = system_name.lower()
-        dt1 = 1_000
-        dt1_name = None
-        dt2 = 1_000
-        dt2_name = None
-        for playlist in playlists:
-            if playlist.get("disabled", False):
-                logger.debug("disabled")
-                continue
-            playlist_name = playlist.get("name")
-            n1 = playlist_name.lower()
-            n2 = playlist.get("dest_folder").lower()
-            d1 = Levenshtein.distance(n1, needle, weights=(1, 1, 2))
-            d2 = Levenshtein.distance(n2, needle, weights=(1, 1, 2))
-            logger.debug(f"system: {system_name} {n1}:{d1}   {n2}:{d2}")
-            if d1 < dt1 and d1 < len(playlist_name):
-                logger.debug(f"set d1: {d1}  {playlist_name}")
-                dt1 = d1
-                dt1_name = playlist_name
-            if d2 < dt2 and d2 < len(playlist_name):
-                logger.debug(f"set d2: {d2}  {playlist_name}")
-                dt2 = d2
-                dt2_name = playlist_name
-        if dt1 < dt2:
-            logger.debug(f"return dt1 {dt1_name}")
-            return dt1_name
+def rank_system_matches(system_name, playlists, limit=8):
+    if not system_name:
+        return []
+
+    def normalize(value):
+        if value is None:
+            return ""
+        value = value.lower().replace(".lpl", "")
+        value = re.sub(r"[^a-z0-9]+", " ", value)
+        return re.sub(r"\s+", " ", value).strip()
+
+    def acronym(value):
+        tokens = normalize(value).split()
+        parts = []
+        for token in tokens:
+            if token.isdigit():
+                parts.append(token)
+            else:
+                parts.append(token[0])
+        return "".join(parts)
+
+    needle = normalize(system_name)
+    candidates = []
+    for playlist in playlists:
+        if playlist.get("disabled", False):
+            continue
+        playlist_name = playlist.get("name")
+        n1 = normalize(playlist_name)
+        n2 = normalize(playlist.get("dest_folder"))
+
+        d1 = Levenshtein.distance(n1, needle, weights=(1, 1, 2))
+        d2 = Levenshtein.distance(n2, needle, weights=(1, 1, 2))
+        best_dist = min(d1, d2)
+        best_len = min(max(len(n1), len(needle)), max(len(n2), len(needle)))
+        ratio = best_dist / max(best_len, 1)
+
+        rank = 99
+        if needle == n1 or needle == n2:
+            rank = 0
+        elif needle in n1 or needle in n2:
+            rank = 1
         else:
-            logger.debug(f"return dt2 {dt2_name}")
-            return dt2_name
+            needle_parts = needle.split()
+            if needle_parts and all(part in n1 or part in n2 for part in needle_parts):
+                rank = 2
+            else:
+                a1 = acronym(n1)
+                a2 = acronym(n2)
+                if needle in a1 or needle in a2:
+                    rank = 3
+                elif ratio <= 0.45:
+                    rank = 4
+
+        logger.debug(
+            f"system: needle='{needle}' name='{n1}' dest='{n2}' rank={rank} d={best_dist} ratio={ratio:.2f}"
+        )
+        if rank < 99:
+            candidates.append((rank, ratio, best_dist, playlist_name))
+
+    candidates.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
+
+    # Deduplicate by playlist name while preserving best score.
+    selected = []
+    seen = set()
+    for item in candidates:
+        name = item[3]
+        if name not in seen:
+            selected.append(name)
+            seen.add(name)
+        if len(selected) >= limit:
+            break
+    return selected
 
 
 def expand_config(default):
@@ -991,10 +1032,26 @@ def main(
     default = expand_config(normalize_transport_config(config))
     playlists = normalize_playlists(config.get("playlists", []))
     if system_name:
-        system_name = match_system(system_name, playlists)
-        if not yes:
-            if not click.confirm(f"Do you want to continue with playlists '{system_name}' ?"):
+        matches = rank_system_matches(system_name, playlists)
+        if not matches:
+            print(f"No playlist match found for '{system_name}'.")
+            sys.exit(-1)
+        if yes:
+            system_name = matches[0]
+        else:
+            print(f"Select a playlist match for '{system_name}':")
+            for idx, match in enumerate(matches, start=1):
+                print(f"{idx}. {match}")
+            print("0. Cancel")
+            selected = click.prompt(
+                "Enter selection number",
+                type=click.IntRange(0, len(matches)),
+                default=1,
+                show_default=True,
+            )
+            if selected == 0:
                 sys.exit(-1)
+            system_name = matches[selected - 1]
 
     jobs = []
     transport = Transport(default, dry_run, force_transport)
