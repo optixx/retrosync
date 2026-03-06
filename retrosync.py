@@ -124,7 +124,7 @@ class TransportBase:
 class TransportBaseUnix(TransportBase):
     @staticmethod
     def getInstance(default, dry_run):
-        if default.get("target") == "remote":
+        if default.get("transport", default.get("target")) == "remote":
             return TransportRemoteUnix(default, dry_run)
         else:
             return TransportLocalUnix(default, dry_run)
@@ -133,7 +133,7 @@ class TransportBaseUnix(TransportBase):
         self.default = default
         self.dry_run = dry_run
         logger.debug(
-            f"TransportBaseUnix::__ctor__: dry_run={self.dry_run} target={default.get('target')}"
+            f"TransportBaseUnix::__ctor__: dry_run={self.dry_run} transport={default.get('transport', default.get('target'))}"
         )
         self.check()
 
@@ -245,7 +245,7 @@ class TransportRemoteUnix(TransportBaseUnix):
 class TransportBaseWindows(TransportBase):
     @staticmethod
     def getInstance(default, dry_run):
-        if default.get("target") == "remote":
+        if default.get("transport", default.get("target")) == "remote":
             return TransportRemoteWindows(default, dry_run)
         else:
             return TransportLocalWindows(default, dry_run)
@@ -837,6 +837,20 @@ def expand_config(default):
     return default
 
 
+def normalize_transport_config(config):
+    default = config.get("default", {})
+    default["transport"] = default.get("transport", default.get("target", "local"))
+
+    remote = config.get("remote", {})
+    for item in ["hostname", "username", "password"]:
+        if item in remote:
+            default[item] = remote.get(item)
+        elif item not in default:
+            default[item] = ""
+
+    return default
+
+
 @click.command()
 @click.option(
     "--all",
@@ -967,7 +981,7 @@ def main(
         sys.exit(0)
 
     config = toml.load(config_file)
-    default = expand_config(config.get("default"))
+    default = expand_config(normalize_transport_config(config))
     playlists = config.get("playlists", [])
     if system_name:
         system_name = match_system(system_name, playlists)

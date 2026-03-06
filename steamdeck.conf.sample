@@ -1,9 +1,6 @@
 [default]
 # Explain the method for copying data, whether it's local or remote.
-target = "remote"
-hostname = "192.168.1.100"
-username = "deck"
-password = "<password>"
+transport = "remote"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Documents/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
@@ -18,6 +15,11 @@ dest_roms = "/home/deck/Emulation/roms"
 target_roms =  "/home/deck/Emulation/roms"
 target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 target_cores_suffix = ".so"
+
+[remote]
+hostname = "192.168.1.100"
+username = "deck"
+password = "<password>"
 
 
 [[playlists]]
