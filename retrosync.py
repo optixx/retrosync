@@ -535,13 +535,27 @@ class SystemJob(JobBase):
         self.transport = transport
         self.size = 1
 
+    def get_src_rom_roots(self):
+        src_roms = self.default.get("src_roms")
+        if isinstance(src_roms, list):
+            roots = [Path(item) for item in src_roms]
+        else:
+            roots = [Path(src_roms)]
+        return roots
+
+    def get_primary_src_rom_root(self):
+        roots = self.get_src_rom_roots()
+        if not roots:
+            raise AssertionError("No source ROM directories configured")
+        return roots[0]
+
 
 class RomSyncJob(SystemJob):
     name = "Sync ROMs"
 
     def setup(self, playlist):
         self.playlist = playlist
-        self.src = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
+        self.src = self.get_primary_src_rom_root() / self.playlist.get("src_folder")
         self.dst = Path(self.default.get("dest_roms")) / self.playlist.get("dest_folder")
         self.size = self.transport.guess_file_count(self.src, [], True)
 
@@ -570,8 +584,7 @@ class PlaylistSyncJob(SystemJob):
             .replace(self.default.get("src_cores_suffix"), self.default.get("target_cores_suffix"))
             .replace(self.default.get("src_cores"), self.default.get("target_cores"))
         )
-        src_rom_dir = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
-        src_rom_alt_dir = Path(self.default.get("src_roms_alt")) / self.playlist.get("src_folder")
+        src_rom_dirs = [root / self.playlist.get("src_folder") for root in self.get_src_rom_roots()]
         target_rom_dir = Path(self.default.get("target_roms")) / self.playlist.get("dest_folder")
         data["default_core_path"] = core_path
         data["scan_content_dir"] = str(target_rom_dir)
@@ -587,8 +600,9 @@ class PlaylistSyncJob(SystemJob):
             src_path = new_item["path"].split("#")[0]
             src_name = Path(src_path).name
             logger.debug(f"migrate_playlist: Convert [{idx + 1}/{src_items_len}] path={src_name}")
-            new_path = src_path.replace(str(src_rom_dir), str(target_rom_dir))
-            new_path = new_path.replace(str(src_rom_alt_dir), str(target_rom_dir))
+            new_path = src_path
+            for src_rom_dir in src_rom_dirs:
+                new_path = new_path.replace(str(src_rom_dir), str(target_rom_dir))
             new_item["path"] = new_path
             items.append(new_item)
 
@@ -684,7 +698,7 @@ class PlaylistUpdatecJob(SystemJob):
         with open(local) as file:
             data = json.load(file)
 
-        src_rom_dir = Path(self.default.get("src_roms")) / self.playlist.get("src_folder")
+        src_rom_dir = self.get_primary_src_rom_root() / self.playlist.get("src_folder")
 
         core_path = Path(self.default.get("src_cores")) / self.playlist.get("src_core_path")
         core_path = core_path.with_suffix(self.default.get("src_cores_suffix"))
@@ -778,12 +792,17 @@ def match_system(system_name, playlists):
 
 
 def expand_config(default):
+    src_roms = default.get("src_roms")
+    if isinstance(src_roms, list):
+        expanded_src_roms = [str(Path(item).expanduser()) for item in src_roms]
+    else:
+        expanded_src_roms = [str(Path(src_roms).expanduser())]
+    default["src_roms"] = expanded_src_roms
+
     for item in [
         "src_playlists",
         "src_bios",
         "src_config",
-        "src_roms",
-        "src_roms_alt",
         "src_cores",
         "src_thumbnails",
         "dest_playlists",
