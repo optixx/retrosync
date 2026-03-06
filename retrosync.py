@@ -116,9 +116,13 @@ def set_transport_status(message):
     transport_status_progress.update(transport_status_task_id, msg=message, visible=visible)
 
 
+def get_transport_mode(default):
+    return str(default.get("transport", "filesystem")).strip().lower()
+
+
 class TransportFactory:
     def __new__(cls, default, dry_run, force_transport):
-        mode = str(default.get("transport", "filesystem")).strip().lower()
+        mode = get_transport_mode(default)
         normalized_force_transport = (
             str(force_transport).strip().lower() if force_transport is not None else None
         )
@@ -179,7 +183,7 @@ class TransportBase:
 class TransportUnixBase(TransportBase):
     @staticmethod
     def getInstance(default, dry_run):
-        if default.get("transport") == "ssh":
+        if get_transport_mode(default) == "ssh":
             return TransportSSHUnix(default, dry_run)
         else:
             return TransportFileSystemUnix(default, dry_run)
@@ -304,7 +308,7 @@ class TransportSSHUnix(TransportUnixBase):
 class TransportWindowsBase(TransportBase):
     @staticmethod
     def getInstance(default, dry_run):
-        if default.get("transport") == "ssh":
+        if get_transport_mode(default) == "ssh":
             return TransportSSHWindows(default, dry_run)
         else:
             return TransportFileSystemWindows(default, dry_run)
@@ -1296,8 +1300,11 @@ def rank_system_matches(system_name, playlists, limit=8):
         logger.debug(
             f"system: needle='{needle}' name='{n1}' dest='{n2}' rank={rank} d={best_dist} ratio={ratio:.2f}"
         )
+        # Always keep fuzzy candidates so interactive selection can still offer options.
         if rank < 99:
             candidates.append((rank, ratio, best_dist, playlist_name))
+        else:
+            candidates.append((5, ratio, best_dist, playlist_name))
 
     candidates.sort(key=lambda x: (x[0], x[1], x[2], x[3]))
 
@@ -1315,6 +1322,8 @@ def rank_system_matches(system_name, playlists, limit=8):
 
 
 def expand_config(default):
+    default = dict(default)
+
     def apply_core_flavor_defaults():
         src_flavor = str(default.get("src_flavor", "")).strip().lower()
         target_flavor = str(default.get("target_flavor", "")).strip().lower()
@@ -1376,28 +1385,22 @@ def expand_config(default):
         "dest_roms",
         "dest_thumbnails",
     ]:
-        default[item] = str(Path(default.get(item)).expanduser())
+        if default.get(item) is not None:
+            default[item] = str(Path(default.get(item)).expanduser())
     return default
 
 
 def normalize_transport_config(config):
     def normalize_mode(value):
-        aliases = {
-            "local": "filesystem",
-            "filesystem": "filesystem",
-            "remote": "ssh",
-            "ssh": "ssh",
-            "localsend": "localsend",
-        }
         mode = str(value).strip().lower()
-        if mode not in aliases:
+        if mode not in {"filesystem", "ssh", "localsend"}:
             raise ValueError(
                 f"Unsupported transport mode '{value}'. Use filesystem, ssh, or localsend."
             )
-        return aliases[mode]
+        return mode
 
     default = config.get("default", {})
-    default["transport"] = normalize_mode(default.get("transport", default.get("target", "local")))
+    default["transport"] = normalize_mode(default.get("transport", "filesystem"))
 
     remote = config.get("remote", {})
     for item in ["hostname", "username", "password", "device_name"]:
@@ -1564,8 +1567,6 @@ def main(
             selected = click.prompt(
                 "Enter selection number",
                 type=click.IntRange(0, len(matches)),
-                default=1,
-                show_default=True,
             )
             if selected == 0:
                 sys.exit(-1)

@@ -3,18 +3,18 @@ from pathlib import Path
 from unittest.mock import patch, Mock
 
 from retrosync import (
-    Transport,
-    TransportLocalUnix,
-    TransportRemoteUnix,
-    TransportLocalWindows,
-    TransportRemoteWindows,
+    TransportFactory,
+    TransportFileSystemUnix,
+    TransportSSHUnix,
+    TransportFileSystemWindows,
+    TransportSSHWindows,
 )
 
 
 @pytest.fixture
 def default_config():
     return {
-        "target": "local",
+        "transport": "filesystem",
         "hostname": "localhost",
         "username": "user",
         "password": "password",
@@ -29,31 +29,31 @@ def dry_run():
 
 
 def test_transport_unix_local(default_config, dry_run):
-    transport = Transport(default_config, dry_run, force_transport="unix")
-    assert isinstance(transport, TransportLocalUnix)
+    transport = TransportFactory(default_config, dry_run, force_transport="unix")
+    assert isinstance(transport, TransportFileSystemUnix)
 
 
 def test_transport_unix_remote(default_config, dry_run):
-    default_config["target"] = "remote"
-    transport = Transport(default_config, dry_run, force_transport="unix")
-    assert isinstance(transport, TransportRemoteUnix)
+    default_config["transport"] = "ssh"
+    transport = TransportFactory(default_config, dry_run, force_transport="unix")
+    assert isinstance(transport, TransportSSHUnix)
 
 
 def test_transport_windows_local(default_config, dry_run):
     with patch("platform.system", return_value="Windows"):
-        transport = Transport(default_config, dry_run, force_transport="windows")
-        assert isinstance(transport, TransportLocalWindows)
+        transport = TransportFactory(default_config, dry_run, force_transport="windows")
+        assert isinstance(transport, TransportFileSystemWindows)
 
 
 def test_transport_windows_remote(default_config, dry_run):
     with patch("platform.system", return_value="Windows"):
-        default_config["target"] = "remote"
-        transport = Transport(default_config, dry_run, force_transport="windows")
-        assert isinstance(transport, TransportRemoteWindows)
+        default_config["transport"] = "ssh"
+        transport = TransportFactory(default_config, dry_run, force_transport="windows")
+        assert isinstance(transport, TransportSSHWindows)
 
 
 def test_transport_unix_local_copy_file(default_config, dry_run):
-    transport = TransportLocalUnix(default_config, dry_run)
+    transport = TransportFileSystemUnix(default_config, dry_run)
     src = Path("tests/assets/bios")
     dest = Path("tests/assets/bios")
     with patch("shutil.copy") as mock_copy:
@@ -62,8 +62,8 @@ def test_transport_unix_local_copy_file(default_config, dry_run):
 
 
 def test_transport_unix_remote_copy_file(default_config, dry_run):
-    default_config["target"] = "remote"
-    transport = TransportRemoteUnix(default_config, dry_run)
+    default_config["transport"] = "ssh"
+    transport = TransportSSHUnix(default_config, dry_run)
     src = Path("tests/assets/bios")
     dest = Path("tests/assets/bios")
     with patch.object(transport, "execute") as mock_execute:
@@ -72,7 +72,7 @@ def test_transport_unix_remote_copy_file(default_config, dry_run):
 
 
 def test_transport_windows_local_copy_file(default_config, dry_run):
-    transport = TransportLocalWindows(default_config, dry_run)
+    transport = TransportFileSystemWindows(default_config, dry_run)
     src = Path("tests/assets/bios")
     dest = Path("tests/assets/bios")
     with patch("shutil.copy") as mock_copy:
@@ -81,7 +81,7 @@ def test_transport_windows_local_copy_file(default_config, dry_run):
 
 
 def test_transport_windows_remote_connect(default_config, dry_run):
-    transport = TransportRemoteWindows(default_config, dry_run)
+    transport = TransportSSHWindows(default_config, dry_run)
     with (
         patch.object(transport, "connect") as mock_connect,
     ):
@@ -90,7 +90,7 @@ def test_transport_windows_remote_connect(default_config, dry_run):
 
 
 def test_transport_windows_remote_copy_file(default_config, dry_run):
-    transport = TransportRemoteWindows(default_config, dry_run)
+    transport = TransportSSHWindows(default_config, dry_run)
     src = Path("tests/assets/bios")
     dest = Path("tests/assets/bios")
     transport.connected = True

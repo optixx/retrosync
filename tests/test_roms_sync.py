@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from retrosync import RomSyncJob, TransportRemoteUnix
+from retrosync import RomSyncJob, TransportSSHUnix
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def playlist():
 
 @pytest.fixture
 def transport(default_config):
-    return TransportRemoteUnix(default_config, dry_run=True)
+    return TransportSSHUnix(default_config, dry_run=True)
 
 
 def test_roms_sync_setup(default_config, playlist, transport):

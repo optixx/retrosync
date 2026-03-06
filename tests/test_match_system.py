@@ -1,38 +1,38 @@
-from retrosync import match_system
+from retrosync import rank_system_matches
 
 
-def test_match_system_exact_match():
+def test_rank_system_matches_exact_match():
     playlists = [
         {"name": "NES", "dest_folder": "nes"},
         {"name": "SNES", "dest_folder": "snes"},
     ]
-    assert match_system("NES", playlists) == "NES"
-    assert match_system("SNES", playlists) == "SNES"
+    assert rank_system_matches("NES", playlists, limit=1) == ["NES"]
+    assert rank_system_matches("SNES", playlists, limit=1) == ["SNES"]
 
 
-def test_match_system_partial_match():
+def test_rank_system_matches_partial_match():
     playlists = [
         {"name": "NES", "dest_folder": "nes"},
         {"name": "SNES", "dest_folder": "snes"},
     ]
-    assert match_system("NE", playlists) == "NES"
-    assert match_system("SNE", playlists) == "SNES"
+    assert rank_system_matches("NE", playlists, limit=1) == ["NES"]
+    assert rank_system_matches("SNE", playlists, limit=1) == ["SNES"]
 
 
-def test_match_system_disabled_playlist():
+def test_rank_system_matches_disabled_playlist():
     playlists = [
         {"name": "ATARI", "dest_folder": "2600"},
         {"name": "SNES", "dest_folder": "snes", "disabled": True},
     ]
-    assert match_system("SNES", playlists) is None
-    assert match_system("2600", playlists) == "ATARI"
+    assert "SNES" not in rank_system_matches("SNES", playlists, limit=5)
+    assert rank_system_matches("2600", playlists, limit=1) == ["ATARI"]
 
 
-def test_match_system_levenshtein_distance():
+def test_rank_system_matches_distance():
     playlists = [
         {"name": "NES", "dest_folder": "nes"},
         {"name": "SNES", "dest_folder": "snes"},
         {"name": "Mega Drive", "dest_folder": "megadrive"},
     ]
-    assert match_system("Mega", playlists) == "Mega Drive"
-    assert match_system("Drive", playlists) == "Mega Drive"
+    assert rank_system_matches("Mega", playlists, limit=1) == ["Mega Drive"]
+    assert rank_system_matches("Drive", playlists, limit=1) == ["Mega Drive"]

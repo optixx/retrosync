@@ -7,8 +7,7 @@ def test_expand_config():
         "src_playlists": "~/playlists",
         "src_bios": "~/bios",
         "src_config": "~/config",
-        "src_roms": "~/roms",
-        "src_roms_alt": "~/roms",
+        "src_roms": ["~/roms"],
         "src_cores": "~/cores",
         "src_thumbnails": "~/thumbnails",
         "dest_playlists": "~/dest_playlists",
@@ -20,5 +19,8 @@ def test_expand_config():
 
     expanded = expand_config(default)
 
+    assert expanded["src_roms"] == [str(Path("~/roms").expanduser())]
     for key, value in default.items():
+        if key == "src_roms":
+            continue
         assert expanded[key] == str(Path(value).expanduser())

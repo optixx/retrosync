@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from retrosync import BiosSync, TransportRemoteUnix
+from retrosync import BiosSync, TransportSSHUnix
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def playlists():
 
 @pytest.fixture
 def transport(default_config):
-    return TransportRemoteUnix(default_config, dry_run=True)
+    return TransportSSHUnix(default_config, dry_run=True)
 
 
 def test_bios_sync_setup(default_config, playlists, transport):

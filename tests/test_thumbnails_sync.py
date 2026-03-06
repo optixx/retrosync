@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from retrosync import ThumbnailsSync, TransportRemoteUnix
+from retrosync import ThumbnailsSync, TransportSSHUnix
 
 
 @pytest.fixture
@@ -48,7 +48,7 @@ def dry_run():
 
 
 def test_thumbnails_sync_setup(default_config, playlists, dry_run):
-    transport = TransportRemoteUnix(default_config, dry_run)
+    transport = TransportSSHUnix(default_config, dry_run)
     thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
     thumbnails_sync.setup()
     assert thumbnails_sync.src == Path("tests/assets/thumbnails")
@@ -57,7 +57,7 @@ def test_thumbnails_sync_setup(default_config, playlists, dry_run):
 
 
 def test_thumbnails_sync_do(default_config, playlists, dry_run, mocker):
-    transport = TransportRemoteUnix(default_config, dry_run)
+    transport = TransportSSHUnix(default_config, dry_run)
     thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
     thumbnails_sync.setup()
 

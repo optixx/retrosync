@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from retrosync import TransportRemoteUnix
+from retrosync import TransportSSHUnix
 
 
 @pytest.fixture
@@ -9,7 +9,7 @@ def default_config():
         "hostname": "example.com",
         "username": "user",
         "password": "password",
-        "target": "remote",
+        "transport": "ssh",
     }
 
 
@@ -19,7 +19,7 @@ def dry_run():
 
 
 def test_build_dest_unix(default_config, dry_run):
-    transport = TransportRemoteUnix(default_config, dry_run)
+    transport = TransportSSHUnix(default_config, dry_run)
     path = Path("/some/path")
     expected = '"user@example.com:/some/path"'
     assert transport.build_dest(path) == expected

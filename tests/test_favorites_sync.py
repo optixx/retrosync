@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from retrosync import FavoritesSync, TransportLocalUnix
+from retrosync import FavoritesSync, TransportFileSystemUnix
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ def playlists():
 
 @pytest.fixture
 def transport(default_config):
-    return TransportLocalUnix(default_config, dry_run=True)
+    return TransportFileSystemUnix(default_config, dry_run=True)
 
 
 def test_favorites_sync_setup(default_config, playlists, transport):
