@@ -4,20 +4,12 @@ hostname = ""
 username = ""
 password = ""
 
-src_playlists = "~/Library/Application Support/RetroArch/playlists"
-src_bios = "~/Library/Application Support/RetroArch/system"
-src_config = "~/Library/Application Support/RetroArch/config/"
+src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Dropbox/Software/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
-src_cores = "~/Library/Application Support/RetroArch/cores"
-src_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
 src_cores_suffix = ".dylib"
 
-dest_playlists = "~/Downloads/ipad/Retroach/playlists"
-dest_bios = "~/Downloads/ipad/Retroach/system"
-dest_config = "~/Downloads/ipad/Retroach/config"
+dest_retroarch_base = "~/Downloads/ipad/Retroach"
 dest_roms = "~/Downloads/ipad/Roms"
-dest_cores = "~/Downloads/ipad/Retroach/cores"
-dest_thumbnails = "~/Downloads/ipad/Retroach/thumbnails"
 
 target_roms =  "~/Documents/Roms"
 target_cores = "/Frameworks"

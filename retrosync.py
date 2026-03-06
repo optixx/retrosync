@@ -792,6 +792,28 @@ def match_system(system_name, playlists):
 
 
 def expand_config(default):
+    def ensure_retroarch_paths(prefix):
+        base_key = f"{prefix}_retroarch_base"
+        base = default.get(base_key)
+        if not base:
+            return
+
+        base_path = Path(base)
+        derived = {
+            f"{prefix}_playlists": base_path / "playlists",
+            f"{prefix}_bios": base_path / "system",
+            f"{prefix}_config": base_path / "config",
+            f"{prefix}_cores": base_path / "cores",
+            f"{prefix}_thumbnails": base_path / "thumbnails",
+        }
+
+        for key, value in derived.items():
+            if default.get(key) is None:
+                default[key] = str(value)
+
+    ensure_retroarch_paths("src")
+    ensure_retroarch_paths("dest")
+
     src_roms = default.get("src_roms")
     if isinstance(src_roms, list):
         expanded_src_roms = [str(Path(item).expanduser()) for item in src_roms]

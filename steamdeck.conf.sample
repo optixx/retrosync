@@ -5,19 +5,14 @@ hostname = "192.168.1.100"
 username = "deck"
 password = "<password>"
 
-src_playlists = "~/Library/Application Support/RetroArch/playlists"
-src_bios = "~/Library/Application Support/RetroArch/system"
-src_config = "~/Library/Application Support/RetroArch/config/"
+src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Documents/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
-src_cores = "~/Library/Application Support/RetroArch/cores"
-src_thumbnails = "~/Library/Application Support/RetroArch/thumbnails"
 src_cores_suffix = ".dylib"
 
 # Provide the specific location of the actual files
-dest_playlists = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/playlists"
+dest_retroarch_base = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch"
 dest_bios = "/home/deck/Emulation/bios"
 dest_roms = "/home/deck/Emulation/roms"
-dest_thumbnails = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/thumbnails"
 
 # Actual Destinations on the Target Device
 target_roms =  "/home/deck/Emulation/roms"
