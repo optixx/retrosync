@@ -16,6 +16,7 @@ import copy
 import click
 import json
 import glob
+import fnmatch
 import sys
 import platform
 import time
@@ -38,6 +39,20 @@ from rich.progress import (
 
 
 logger = logging.getLogger()
+
+GLOBAL_EXCLUDE_PATTERNS = [
+    ".DS_Store",
+    "._*",
+    ".Spotlight-V100",
+    ".Trashes",
+    ".fseventsd",
+    "Thumbs.db",
+    "desktop.ini",
+    "__MACOSX",
+    ".git",
+    ".svn",
+    ".zip",
+]
 
 item_tpl = {
     "path": "",
@@ -103,6 +118,13 @@ class Transport:
 
 
 class TransportBase:
+    def is_excluded_path(self, path: Path):
+        for part in path.parts:
+            for pattern in GLOBAL_EXCLUDE_PATTERNS:
+                if fnmatch.fnmatch(part, pattern):
+                    return True
+        return False
+
     def guess_file_count(self, src_path: Path, whitelist: list, recursive=False):
         cnt = 0
         if recursive:
@@ -110,6 +132,8 @@ class TransportBase:
         else:
             generator = src_path.glob("*")
         for filename in generator:
+            if self.is_excluded_path(filename.relative_to(src_path)):
+                continue
             if whitelist:
                 for item in whitelist:
                     if filename.suffix == item:
@@ -192,8 +216,12 @@ class TransportBaseUnix(TransportBase):
         callback=None,
     ):
         self.ensure_dir_exists(dest_path)
-        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete"
+        args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete "
+        for item in GLOBAL_EXCLUDE_PATTERNS:
+            args += f'--exclude="{item}" '
         if whitelist:
+            # Keep walking directories when using a whitelist, then include matching files.
+            args += '--include="*/" '
             for item in whitelist:
                 args += f'--include="*{item}" '
             args += '--exclude="*" '
@@ -288,6 +316,9 @@ class TransportLocalWindows(TransportBaseWindows):
                 callback()
             cnt += 1
             s = item
+            if self.is_excluded_path(s.relative_to(src_path)):
+                logger.debug(f"TransportLocalWindows::copy_files: excluded {s}")
+                continue
             d = dest_path / item.name
             if s.is_dir():
                 self.copy_files(s, d, whitelist, recursive, callback)
@@ -379,6 +410,9 @@ class TransportRemoteWindows(TransportBaseWindows):
             )
             if callback:
                 callback()
+            if self.is_excluded_path(src_filename.relative_to(src_path)):
+                logger.debug(f"TransportRemoteWindows::copy_files: excluded {src_filename}")
+                continue
             dest_filename = dest_path / src_filename.name
 
             if src_filename.is_dir():
