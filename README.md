@@ -49,7 +49,7 @@ In this sample configuration, a setup is provided for your local desktop's Retro
 ```toml
 
 [default]
-# Select transport mode: filesystem, ssh, or localsend (draft).
+# Select transport mode: filesystem, ssh, or localsend.
 transport = "ssh"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
@@ -71,6 +71,8 @@ target_flavor = "linux"
 hostname = "192.168.1.100"
 username = "deck"
 password = "<password>"
+# Required only for transport = "localsend"
+device_name = "iPhone von David"
 
 
 [[playlists]]

@@ -1,5 +1,5 @@
 [default]
-# Select transport mode: filesystem, ssh, or localsend (draft).
+# Select transport mode: filesystem, ssh, or localsend.
 transport = "ssh"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
@@ -20,6 +20,7 @@ target_flavor = "linux"
 hostname = "192.168.1.100"
 username = "deck"
 password = "<password>"
+device_name = ""
 
 
 [[playlists]]

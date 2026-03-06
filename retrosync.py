@@ -17,10 +17,19 @@ import click
 import json
 import glob
 import fnmatch
+import mimetypes
+import uuid
+import os
 import sys
 import platform
 import time
 import re
+import socket
+import ssl
+import ipaddress
+import concurrent.futures
+import urllib.parse
+import urllib.request
 import paramiko
 import Levenshtein
 from lxml import etree
@@ -81,12 +90,30 @@ system_steps_progress = Progress(
     TextColumn("({task.completed} of {task.total} steps done)"),
 )
 
+transport_status_progress = Progress(
+    TextColumn("  "),
+    TextColumn("[bold cyan]{task.fields[msg]}"),
+)
+
 overall_progress = Progress(TimeElapsedColumn(), BarColumn(), TextColumn("{task.description}"))
 
 progress_group = Group(
-    Panel(Group(current_system_progress, step_progress, system_steps_progress)),
+    Panel(
+        Group(
+            current_system_progress, step_progress, transport_status_progress, system_steps_progress
+        )
+    ),
     overall_progress,
 )
+
+transport_status_task_id = None
+
+
+def set_transport_status(message):
+    if transport_status_task_id is None:
+        return
+    visible = bool(message)
+    transport_status_progress.update(transport_status_task_id, msg=message, visible=visible)
 
 
 class TransportFactory:
@@ -99,13 +126,13 @@ class TransportFactory:
             normalized_force_transport = None
 
         if mode == "localsend":
-            return TransportLocalSendDraft(default, dry_run)
+            return TransportLocalSend(default, dry_run)
 
         if normalized_force_transport:
             if normalized_force_transport == "unix":
                 return TransportUnixBase.getInstance(default, dry_run)
             elif normalized_force_transport == "windows":
-                return TransportSSHWindows.getInstance(default, dry_run)
+                return TransportWindowsBase.getInstance(default, dry_run)
             else:
                 raise NotImplementedError
 
@@ -113,7 +140,7 @@ class TransportFactory:
         if current_platform in ["Darwin", "Linux"]:
             return TransportUnixBase.getInstance(default, dry_run)
         elif current_platform in ["Windows"]:
-            return TransportSSHWindows.getInstance(default, dry_run)
+            return TransportWindowsBase.getInstance(default, dry_run)
         else:
             print(
                 f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
@@ -283,17 +310,320 @@ class TransportWindowsBase(TransportBase):
             return TransportFileSystemWindows(default, dry_run)
 
 
-class TransportLocalSendDraft(TransportBase):
+class TransportLocalSend(TransportBase):
+    DEFAULT_PORT = 53317
+    DEFAULT_MULTICAST_ADDR = "224.0.0.167"
+
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
+        self.device_name = str(self.default.get("device_name", "")).strip()
+        self._cached_device = None
+        self._cached_base_url = None
+        self._upload_root = self._compute_upload_root()
+        self.sender_info = {
+            "alias": str(self.default.get("localsend_alias", platform.node())),
+            "version": "2.1",
+            "deviceModel": platform.system(),
+            "deviceType": "desktop",
+            "fingerprint": str(uuid.uuid4()),
+            "port": self.DEFAULT_PORT,
+            "protocol": "http",
+            "download": False,
+        }
+        if not self.device_name:
+            print("LocalSend transport requires [remote].device_name in the config.")
+            sys.exit(-1)
 
-    def _not_implemented(self):
-        print("Transport mode 'localsend' is a draft and not implemented yet.")
+    def _status(self, message):
+        set_transport_status(f"LocalSend: {message}")
+
+    def _compute_upload_root(self):
+        path_keys = [
+            "dest_playlists",
+            "dest_bios",
+            "dest_config",
+            "dest_roms",
+            "dest_thumbnails",
+        ]
+        candidates = []
+        for key in path_keys:
+            value = self.default.get(key)
+            if not value:
+                continue
+            try:
+                candidates.append(str(Path(value)))
+            except Exception:
+                continue
+
+        if not candidates:
+            return None
+
+        try:
+            common = os.path.commonpath(candidates)
+        except ValueError:
+            return None
+        return Path(common)
+
+    def _build_upload_name(self, dest_filename: Path):
+        try:
+            if self._upload_root is not None:
+                rel = dest_filename.relative_to(self._upload_root)
+                return rel.as_posix()
+        except Exception:
+            pass
+        return dest_filename.name
+
+    def _http_json(self, method, url, body=None, timeout=4):
+        data = None
+        headers = {}
+        if body is not None:
+            data = json.dumps(body).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
+        request = urllib.request.Request(url, data=data, headers=headers, method=method)
+        context = ssl._create_unverified_context() if url.startswith("https://") else None
+        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+            payload = response.read()
+            if not payload:
+                return {}
+            return json.loads(payload.decode("utf-8"))
+
+    def _http_binary(self, method, url, binary, timeout=30):
+        request = urllib.request.Request(
+            url, data=binary, headers={"Content-Type": "application/octet-stream"}, method=method
+        )
+        context = ssl._create_unverified_context() if url.startswith("https://") else None
+        with urllib.request.urlopen(request, timeout=timeout, context=context):
+            return
+
+    def _discover_devices(self, timeout_seconds=3):
+        seen = {}
+        self._status("discovering devices via multicast...")
+        group = socket.inet_aton(self.DEFAULT_MULTICAST_ADDR)
+
+        recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        try:
+            recv_sock.bind(("", self.DEFAULT_PORT))
+        except OSError:
+            recv_sock.bind(("", 0))
+        mreq = group + socket.inet_aton("0.0.0.0")
+        recv_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        recv_sock.settimeout(0.25)
+
+        send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+        send_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
+
+        announce = dict(self.sender_info)
+        announce["announce"] = True
+        send_sock.sendto(
+            json.dumps(announce).encode("utf-8"),
+            (self.DEFAULT_MULTICAST_ADDR, self.DEFAULT_PORT),
+        )
+
+        deadline = time.time() + timeout_seconds
+        while time.time() < deadline:
+            try:
+                packet, addr = recv_sock.recvfrom(65535)
+            except TimeoutError:
+                continue
+            except OSError:
+                break
+            try:
+                data = json.loads(packet.decode("utf-8"))
+            except Exception:
+                continue
+
+            fingerprint = str(data.get("fingerprint", ""))
+            if not fingerprint or fingerprint == self.sender_info["fingerprint"]:
+                continue
+            ip = addr[0]
+            seen[fingerprint] = {
+                "ip": ip,
+                "port": int(data.get("port", self.DEFAULT_PORT)),
+                "protocol": str(data.get("protocol", "http")),
+                "alias": str(data.get("alias", "")),
+                "fingerprint": fingerprint,
+            }
+
+        recv_sock.close()
+        send_sock.close()
+        devices = list(seen.values())
+        if devices:
+            self._status(f"multicast discovery found {len(devices)} device(s)")
+            return devices
+        self._status("multicast discovery found no devices, trying subnet fallback...")
+        return self._discover_devices_http_fallback()
+
+    def _get_local_ipv4_candidates(self):
+        ips = set()
+        try:
+            for item in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+                ip = item[4][0]
+                if ip and not ip.startswith("127."):
+                    ips.add(ip)
+        except OSError:
+            pass
+
+        # Primary outbound interface hint.
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sock.connect(("8.8.8.8", 53))
+            ip = sock.getsockname()[0]
+            if ip and not ip.startswith("127."):
+                ips.add(ip)
+            sock.close()
+        except OSError:
+            pass
+        return sorted(ips)
+
+    def _probe_register(self, ip, port, protocol):
+        base = f"{protocol}://{ip}:{port}"
+        try:
+            response = self._http_json(
+                "POST", f"{base}/api/localsend/v2/register", body=self.sender_info, timeout=0.4
+            )
+        except Exception:
+            return None
+
+        alias = str(response.get("alias", "")).strip()
+        fingerprint = str(response.get("fingerprint", "")).strip()
+        if not alias:
+            return None
+        if fingerprint and fingerprint == self.sender_info["fingerprint"]:
+            return None
+        return {
+            "ip": ip,
+            "port": port,
+            "protocol": protocol,
+            "alias": alias,
+            "fingerprint": fingerprint,
+        }
+
+    def _discover_devices_http_fallback(self):
+        local_ips = self._get_local_ipv4_candidates()
+        if not local_ips:
+            return []
+
+        candidates = set()
+        for ip in local_ips:
+            network = ipaddress.ip_network(f"{ip}/24", strict=False)
+            for host in network.hosts():
+                target = str(host)
+                if target != ip:
+                    candidates.add(target)
+
+        discovered = {}
+        self._status(f"probing LocalSend API on local /24 subnets ({len(candidates)} hosts)...")
+
+        def probe_one(target_ip):
+            for protocol in ["https", "http"]:
+                result = self._probe_register(target_ip, self.DEFAULT_PORT, protocol)
+                if result:
+                    return result
+            return None
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
+            futures = [executor.submit(probe_one, ip) for ip in sorted(candidates)]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if not result:
+                    continue
+                key = result.get("fingerprint") or f'{result["ip"]}:{result["port"]}'
+                discovered[key] = result
+
+        if discovered:
+            self._status(f"subnet fallback found {len(discovered)} device(s)")
+        else:
+            self._status("subnet fallback found no devices")
+        return list(discovered.values())
+
+    def _resolve_target_device(self):
+        if self._cached_device is not None:
+            return self._cached_device
+
+        devices = self._discover_devices()
+        if not devices:
+            print("LocalSend: no devices discovered on the network.")
+            sys.exit(-1)
+
+        needle = self.device_name.lower()
+        exact = [d for d in devices if d["alias"].lower() == needle]
+        if exact:
+            self._status(f"matched device '{exact[0]['alias']}' at {exact[0]['ip']}")
+            self._cached_device = exact[0]
+            return self._cached_device
+
+        partial = [d for d in devices if needle in d["alias"].lower()]
+        if partial:
+            self._status(f"matched device '{partial[0]['alias']}' at {partial[0]['ip']}")
+            self._cached_device = partial[0]
+            return self._cached_device
+
+        aliases = ", ".join(sorted([d["alias"] for d in devices if d["alias"]]))
+        print(f"LocalSend: device '{self.device_name}' not found. Discovered: {aliases}")
         sys.exit(-1)
 
+    def _register(self, device):
+        base = f'{device["protocol"]}://{device["ip"]}:{device["port"]}'
+        self._http_json(
+            "POST",
+            f"{base}/api/localsend/v2/register",
+            body=self.sender_info,
+        )
+        return base
+
+    def _get_registered_base_url(self):
+        if self._cached_base_url is not None:
+            return self._cached_base_url
+        device = self._resolve_target_device()
+        self._cached_base_url = self._register(device)
+        self._status("connection established")
+        return self._cached_base_url
+
+    def _upload_one(self, base_url, src_filename: Path, dest_filename: Path):
+        file_id = str(uuid.uuid4())
+        upload_name = self._build_upload_name(dest_filename)
+        mime_type = mimetypes.guess_type(upload_name)[0] or "application/octet-stream"
+        file_size = src_filename.stat().st_size
+
+        prepare_body = {
+            "info": self.sender_info,
+            "files": {
+                file_id: {
+                    "id": file_id,
+                    "fileName": upload_name,
+                    "size": file_size,
+                    "fileType": mime_type,
+                }
+            },
+        }
+        prepare = self._http_json(
+            "POST",
+            f"{base_url}/api/localsend/v2/prepare-upload",
+            body=prepare_body,
+        )
+        session_id = prepare.get("sessionId")
+        token = (prepare.get("files") or {}).get(file_id)
+        if not session_id or not token:
+            raise RuntimeError(f"Invalid prepare-upload response for '{src_filename.name}'")
+
+        with open(src_filename, "rb") as fd:
+            binary = fd.read()
+
+        query = urllib.parse.urlencode({"sessionId": session_id, "fileId": file_id, "token": token})
+        self._http_binary("POST", f"{base_url}/api/localsend/v2/upload?{query}", binary=binary)
+
     def copy_file(self, src_filename: Path, dest_filename: Path):
-        self._not_implemented()
+        if self.dry_run:
+            logger.debug(
+                f"TransportLocalSend::copy_file: dry-run {src_filename} -> {dest_filename.name}"
+            )
+            return
+        base_url = self._get_registered_base_url()
+        self._status(f"uploading file '{src_filename.name}'")
+        self._upload_one(base_url, src_filename, dest_filename)
 
     def copy_files(
         self,
@@ -303,10 +633,38 @@ class TransportLocalSendDraft(TransportBase):
         recursive: bool = False,
         callback=None,
     ):
-        self._not_implemented()
+        if self.dry_run:
+            logger.debug(f"TransportLocalSend::copy_files: dry-run {src_path} -> {dest_path}")
+            return
+        base_url = self._get_registered_base_url()
+        self._status(f"starting upload from '{src_path}'")
+
+        if recursive:
+            generator = src_path.rglob("*")
+        else:
+            generator = src_path.glob("*")
+
+        for src_filename in generator:
+            if src_filename.is_dir():
+                continue
+            rel = src_filename.relative_to(src_path)
+            if self.is_excluded_path(rel):
+                continue
+            if whitelist:
+                matched = False
+                for item in whitelist:
+                    if src_filename.suffix == item:
+                        matched = True
+                        break
+                if not matched:
+                    continue
+            if callback:
+                callback()
+            dest_filename = dest_path / rel
+            self._upload_one(base_url, src_filename, dest_filename)
 
     def ensure_dir_exists(self, path_directory: Path):
-        self._not_implemented()
+        return
 
 
 class TransportFileSystemWindows(TransportWindowsBase):
@@ -982,7 +1340,7 @@ def normalize_transport_config(config):
     default["transport"] = normalize_mode(default.get("transport", default.get("target", "local")))
 
     remote = config.get("remote", {})
-    for item in ["hostname", "username", "password"]:
+    for item in ["hostname", "username", "password", "device_name"]:
         if item in remote:
             default[item] = remote.get(item)
         elif item not in default:
@@ -1093,6 +1451,7 @@ def main(
     yes,
 ):
     global logger
+    global transport_status_task_id
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
@@ -1186,6 +1545,7 @@ def main(
     system_size = sum([j.size for j in system_jobs])
     overall_task_id = overall_progress.add_task("", total=jobs_size + system_size)
     with Live(progress_group):
+        transport_status_task_id = transport_status_progress.add_task("", msg="", visible=False)
         for (
             idx,
             job,
@@ -1267,6 +1627,7 @@ def main(
                 overall_task_id,
                 description=f"[bold green]{len(systems)} systems processed, done!",
             )
+        transport_status_progress.update(transport_status_task_id, visible=False)
 
 
 if __name__ == "__main__":

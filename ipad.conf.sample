@@ -16,6 +16,7 @@ target_flavor = "apple"
 hostname = ""
 username = ""
 password = ""
+device_name = ""
 
 [[playlists]]
 name = "Atari - 2600.lpl"
