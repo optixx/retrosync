@@ -323,6 +323,21 @@ class TransportLocalSend(TransportBase):
         self.default = default
         self.dry_run = dry_run
         self.device_name = str(self.default.get("device_name", "")).strip()
+        try:
+            self.port = int(
+                self.default.get("port", self.default.get("localsend_port", self.DEFAULT_PORT))
+            )
+        except (TypeError, ValueError):
+            self.port = self.DEFAULT_PORT
+        self.multicast_addr = (
+            str(
+                self.default.get(
+                    "multicast_addr",
+                    self.default.get("localsend_multicast_addr", self.DEFAULT_MULTICAST_ADDR),
+                )
+            ).strip()
+            or self.DEFAULT_MULTICAST_ADDR
+        )
         self._cached_device = None
         self._cached_base_url = None
         self._upload_root = self._compute_upload_root()
@@ -332,12 +347,12 @@ class TransportLocalSend(TransportBase):
             "deviceModel": platform.system(),
             "deviceType": "desktop",
             "fingerprint": str(uuid.uuid4()),
-            "port": self.DEFAULT_PORT,
+            "port": self.port,
             "protocol": "http",
             "download": False,
         }
         if not self.device_name:
-            print("LocalSend transport requires [remote].device_name in the config.")
+            print("LocalSend transport requires [localsend].device_name in the config.")
             sys.exit(-1)
 
     def _status(self, message):
@@ -405,12 +420,12 @@ class TransportLocalSend(TransportBase):
     def _discover_devices(self, timeout_seconds=3):
         seen = {}
         self._status("discovering devices via multicast...")
-        group = socket.inet_aton(self.DEFAULT_MULTICAST_ADDR)
+        group = socket.inet_aton(self.multicast_addr)
 
         recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
         recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
-            recv_sock.bind(("", self.DEFAULT_PORT))
+            recv_sock.bind(("", self.port))
         except OSError:
             recv_sock.bind(("", 0))
         mreq = group + socket.inet_aton("0.0.0.0")
@@ -424,7 +439,7 @@ class TransportLocalSend(TransportBase):
         announce["announce"] = True
         send_sock.sendto(
             json.dumps(announce).encode("utf-8"),
-            (self.DEFAULT_MULTICAST_ADDR, self.DEFAULT_PORT),
+            (self.multicast_addr, self.port),
         )
 
         deadline = time.time() + timeout_seconds
@@ -446,7 +461,7 @@ class TransportLocalSend(TransportBase):
             ip = addr[0]
             seen[fingerprint] = {
                 "ip": ip,
-                "port": int(data.get("port", self.DEFAULT_PORT)),
+                "port": int(data.get("port", self.port)),
                 "protocol": str(data.get("protocol", "http")),
                 "alias": str(data.get("alias", "")),
                 "fingerprint": fingerprint,
@@ -524,7 +539,7 @@ class TransportLocalSend(TransportBase):
 
         def probe_one(target_ip):
             for protocol in ["https", "http"]:
-                result = self._probe_register(target_ip, self.DEFAULT_PORT, protocol)
+                result = self._probe_register(target_ip, self.port, protocol)
                 if result:
                     return result
             return None
@@ -1402,10 +1417,36 @@ def normalize_transport_config(config):
     default = config.get("default", {})
     default["transport"] = normalize_mode(default.get("transport", "filesystem"))
 
+    # Preferred split config sections:
+    #   [ssh] for hostname/username/password
+    #   [localsend] for device_name/port/multicast_addr
+    # Keep [remote] as backward-compatible fallback.
+    ssh = config.get("ssh", {})
+    localsend = config.get("localsend", {})
     remote = config.get("remote", {})
-    for item in ["hostname", "username", "password", "device_name"]:
-        if item in remote:
+
+    section_map = {
+        "hostname": ssh,
+        "username": ssh,
+        "password": ssh,
+        "device_name": localsend,
+        "port": localsend,
+        "multicast_addr": localsend,
+    }
+    for item, section in section_map.items():
+        if item in section:
+            default[item] = section.get(item)
+        elif item in remote:
             default[item] = remote.get(item)
+        # Legacy LocalSend key names kept for compatibility with older configs.
+        elif item == "port" and "localsend_port" in section:
+            default[item] = section.get("localsend_port")
+        elif item == "multicast_addr" and "localsend_multicast_addr" in section:
+            default[item] = section.get("localsend_multicast_addr")
+        elif item == "port" and "localsend_port" in remote:
+            default[item] = remote.get("localsend_port")
+        elif item == "multicast_addr" and "localsend_multicast_addr" in remote:
+            default[item] = remote.get("localsend_multicast_addr")
         elif item not in default:
             default[item] = ""
 

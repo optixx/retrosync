@@ -16,11 +16,15 @@ target_roms =  "/home/deck/Emulation/roms"
 target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 target_flavor = "linux"
 
-[remote]
+[ssh]
 hostname = "192.168.1.100"
 username = "deck"
 password = "<password>"
+
+[localsend]
 device_name = ""
+port = 53317
+multicast_addr = "224.0.0.167"
 
 
 [[playlists]]

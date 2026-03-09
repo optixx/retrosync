@@ -5,9 +5,11 @@ from unittest.mock import patch, Mock
 from retrosync import (
     TransportFactory,
     TransportFileSystemUnix,
+    TransportLocalSend,
     TransportSSHUnix,
     TransportFileSystemWindows,
     TransportSSHWindows,
+    normalize_transport_config,
 )
 
 
@@ -141,3 +143,86 @@ def test_transport_windows_local_copy_files_skips_global_excludes(tmp_path, defa
     assert not (dest / ".DS_Store").exists()
     assert not (dest / ".zip").exists()
     assert not (dest / "__MACOSX").exists()
+
+
+def test_normalize_transport_config_includes_localsend_network_settings():
+    config = {
+        "default": {"transport": "localsend"},
+        "localsend": {
+            "device_name": "My iPhone",
+            "port": 53317,
+            "multicast_addr": "224.0.0.167",
+        },
+    }
+    default = normalize_transport_config(config)
+    assert default["port"] == 53317
+    assert default["multicast_addr"] == "224.0.0.167"
+
+
+def test_normalize_transport_config_reads_ssh_and_localsend_sections():
+    config = {
+        "default": {"transport": "ssh"},
+        "ssh": {
+            "hostname": "steamdeck",
+            "username": "deck",
+            "password": "secret",
+        },
+        "localsend": {
+            "device_name": "My iPhone",
+            "port": 53317,
+            "multicast_addr": "224.0.0.167",
+        },
+    }
+    default = normalize_transport_config(config)
+    assert default["hostname"] == "steamdeck"
+    assert default["username"] == "deck"
+    assert default["password"] == "secret"
+    assert default["device_name"] == "My iPhone"
+    assert default["port"] == 53317
+    assert default["multicast_addr"] == "224.0.0.167"
+
+
+def test_normalize_transport_config_keeps_remote_fallback():
+    config = {
+        "default": {"transport": "localsend"},
+        "remote": {
+            "hostname": "legacy-host",
+            "username": "legacy-user",
+            "password": "legacy-pass",
+            "device_name": "Legacy iPhone",
+            "localsend_port": 53317,
+            "localsend_multicast_addr": "224.0.0.167",
+        },
+    }
+    default = normalize_transport_config(config)
+    assert default["hostname"] == "legacy-host"
+    assert default["username"] == "legacy-user"
+    assert default["password"] == "legacy-pass"
+    assert default["device_name"] == "Legacy iPhone"
+    assert default["port"] == 53317
+    assert default["multicast_addr"] == "224.0.0.167"
+
+
+def test_transport_localsend_uses_configured_port_and_multicast():
+    default = {
+        "transport": "localsend",
+        "device_name": "My iPhone",
+        "port": 55555,
+        "multicast_addr": "239.10.10.10",
+    }
+    transport = TransportLocalSend(default, dry_run=True)
+    assert transport.port == 55555
+    assert transport.multicast_addr == "239.10.10.10"
+    assert transport.sender_info["port"] == 55555
+
+
+def test_transport_localsend_still_supports_legacy_key_names():
+    default = {
+        "transport": "localsend",
+        "device_name": "My iPhone",
+        "localsend_port": 55556,
+        "localsend_multicast_addr": "239.10.10.11",
+    }
+    transport = TransportLocalSend(default, dry_run=True)
+    assert transport.port == 55556
+    assert transport.multicast_addr == "239.10.10.11"

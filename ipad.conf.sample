@@ -1,5 +1,5 @@
 [default]
-transport = "filesystem"
+transport = "localsend"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Dropbox/Software/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
@@ -12,11 +12,15 @@ target_roms =  "~/Documents/Roms"
 target_cores = "/Frameworks"
 target_flavor = "apple"
 
-[remote]
+[ssh]
 hostname = ""
 username = ""
 password = ""
+
+[localsend]
 device_name = ""
+port = 53317
+multicast_addr = "224.0.0.167"
 
 [[playlists]]
 name = "Atari - 2600.lpl"
