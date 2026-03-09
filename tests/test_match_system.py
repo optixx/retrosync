@@ -36,3 +36,13 @@ def test_rank_system_matches_distance():
     ]
     assert rank_system_matches("Mega", playlists, limit=1) == ["Mega Drive"]
     assert rank_system_matches("Drive", playlists, limit=1) == ["Mega Drive"]
+
+
+def test_rank_system_matches_prefers_related_nintendo_results():
+    playlists = [
+        {"name": "Nintendo - NES.lpl", "dest_folder": "nes"},
+        {"name": "Nintendo - SNES.lpl", "dest_folder": "snes"},
+        {"name": "FBNeo - Arcade Games.lpl", "dest_folder": "fbneo"},
+    ]
+    matches = rank_system_matches("Nintendo", playlists, limit=3)
+    assert matches[:2] == ["Nintendo - NES.lpl", "Nintendo - SNES.lpl"]

@@ -14,7 +14,7 @@ sync: ## Install project dependencies with uv
 install: homebrew bootstrap sync ## Install all depencies
 
 run-tests: ## Run tests
-	uv run pytest tests/ -rP
+	uv run --group test pytest tests/ -rP
 
 check-ruff: ## Run ruff checks
 	uv run ruff check --output-format=github .
