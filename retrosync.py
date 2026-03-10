@@ -13,23 +13,20 @@ import tempfile
 import toml
 import logging
 import copy
+import concurrent.futures
 import click
 import json
 import glob
 import fnmatch
-import mimetypes
-import uuid
-import os
 import sys
 import platform
 import time
 import re
-import socket
-import ssl
-import ipaddress
-import concurrent.futures
+import threading
+import base64
 import urllib.parse
 import urllib.request
+import urllib.error
 import paramiko
 import Levenshtein
 from lxml import etree
@@ -95,18 +92,34 @@ transport_status_progress = Progress(
     TextColumn("[bold cyan]{task.fields[msg]}"),
 )
 
+transport_file_progress = Progress(
+    TextColumn("  "),
+    TextColumn("[bold green]File Upload"),
+    BarColumn(),
+    TextColumn("{task.completed}/{task.total}"),
+)
+
 overall_progress = Progress(TimeElapsedColumn(), BarColumn(), TextColumn("{task.description}"))
 
 progress_group = Group(
     Panel(
         Group(
-            current_system_progress, step_progress, transport_status_progress, system_steps_progress
+            current_system_progress,
+            step_progress,
+            transport_status_progress,
+            transport_file_progress,
+            system_steps_progress,
         )
     ),
     overall_progress,
 )
 
 transport_status_task_id = None
+transport_file_task_id = None
+
+
+class TransportError(Exception):
+    pass
 
 
 def set_transport_status(message):
@@ -114,6 +127,33 @@ def set_transport_status(message):
         return
     visible = bool(message)
     transport_status_progress.update(transport_status_task_id, msg=message, visible=visible)
+
+
+def begin_transport_file_progress(total):
+    if transport_file_task_id is None:
+        return
+    transport_file_progress.update(
+        transport_file_task_id, total=max(0, total), completed=0, visible=bool(total)
+    )
+
+
+def advance_transport_file_progress(step=1):
+    if transport_file_task_id is None:
+        return
+    transport_file_progress.update(transport_file_task_id, advance=step)
+
+
+def end_transport_file_progress():
+    if transport_file_task_id is None:
+        return
+    transport_file_progress.update(transport_file_task_id, visible=False)
+
+
+def complete_transport_file_progress():
+    if transport_file_task_id is None:
+        return
+    task = transport_file_progress.tasks[transport_file_task_id]
+    transport_file_progress.update(transport_file_task_id, completed=task.total)
 
 
 def get_transport_mode(default):
@@ -129,8 +169,8 @@ class TransportFactory:
         if normalized_force_transport in (None, "", "false"):
             normalized_force_transport = None
 
-        if mode == "localsend":
-            return TransportLocalSend(default, dry_run)
+        if mode == "webdav":
+            return TransportWebDAV(default, dry_run)
 
         if normalized_force_transport:
             if normalized_force_transport == "unix":
@@ -314,385 +354,218 @@ class TransportWindowsBase(TransportBase):
             return TransportFileSystemWindows(default, dry_run)
 
 
-class TransportLocalSend(TransportBase):
-    DEFAULT_PORT = 53317
-    DEFAULT_MULTICAST_ADDR = "224.0.0.167"
-    PREPARE_CHUNK_SIZE = 200
+class TransportWebDAV(TransportBase):
+    DEFAULT_MAX_WORKERS = 4
 
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
-        self.device_name = str(self.default.get("device_name", "")).strip()
+        self.host = str(self.default.get("host", "")).strip()
+        self.username = str(self.default.get("username", "")).strip()
+        self.password = str(self.default.get("password", ""))
+        self.base_url = self._normalize_base_url(self.host)
+        self._auth_header = self._build_auth_header()
+        self._thread_local = threading.local()
+        self._dir_lock = threading.Lock()
+        self._known_dirs = {"/"}
         try:
-            self.port = int(
-                self.default.get("port", self.default.get("localsend_port", self.DEFAULT_PORT))
+            self.max_workers = max(
+                1, int(self.default.get("webdav_max_workers", self.DEFAULT_MAX_WORKERS))
             )
         except (TypeError, ValueError):
-            self.port = self.DEFAULT_PORT
-        self.multicast_addr = (
-            str(
-                self.default.get(
-                    "multicast_addr",
-                    self.default.get("localsend_multicast_addr", self.DEFAULT_MULTICAST_ADDR),
-                )
-            ).strip()
-            or self.DEFAULT_MULTICAST_ADDR
+            self.max_workers = self.DEFAULT_MAX_WORKERS
+        logger.debug(
+            "TransportWebDAV::__ctor__: dry_run=%s host=%s username=%s max_workers=%s",
+            self.dry_run,
+            self.base_url,
+            self.username,
+            self.max_workers,
         )
-        self._cached_device = None
-        self._cached_base_url = None
-        self._upload_root = self._compute_upload_root()
-        self.sender_info = {
-            "alias": str(self.default.get("localsend_alias", platform.node())),
-            "version": "2.1",
-            "deviceModel": platform.system(),
-            "deviceType": "desktop",
-            "fingerprint": str(uuid.uuid4()),
-            "port": self.port,
-            "protocol": "http",
-            "download": False,
-        }
-        if not self.device_name:
-            print("LocalSend transport requires [localsend].device_name in the config.")
+        if not self.base_url:
+            print("WebDAV transport requires [webdav].host in the config.")
             sys.exit(-1)
+
+    def _normalize_base_url(self, host):
+        if not host:
+            return ""
+        if not host.startswith(("http://", "https://")):
+            host = f"http://{host}"
+        return host.rstrip("/")
+
+    def _build_auth_header(self):
+        if not self.username and not self.password:
+            return None
+        token = base64.b64encode(f"{self.username}:{self.password}".encode()).decode("ascii")
+        return f"Basic {token}"
+
+    def _build_opener(self):
+        if not self.username and not self.password:
+            return urllib.request.build_opener()
+        password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+        password_mgr.add_password(None, self.base_url, self.username, self.password)
+        handlers = [
+            urllib.request.HTTPBasicAuthHandler(password_mgr),
+            urllib.request.HTTPDigestAuthHandler(password_mgr),
+        ]
+        return urllib.request.build_opener(*handlers)
+
+    def _get_thread_opener(self):
+        opener = getattr(self._thread_local, "opener", None)
+        if opener is None:
+            opener = self._build_opener()
+            self._thread_local.opener = opener
+        return opener
 
     def _status(self, message):
-        set_transport_status(f"LocalSend: {message}")
+        set_transport_status(f"WebDAV: {message}")
 
-    def _compute_upload_root(self):
-        path_keys = [
-            "dest_playlists",
-            "dest_bios",
-            "dest_config",
-            "dest_roms",
-            "dest_thumbnails",
-        ]
-        candidates = []
-        for key in path_keys:
-            value = self.default.get(key)
-            if not value:
-                continue
-            try:
-                candidates.append(str(Path(value)))
-            except Exception:
-                continue
+    def _remote_path(self, path_value: Path):
+        path = path_value.as_posix()
+        home = Path.home().as_posix()
 
-        if not candidates:
-            return None
+        # Configs often use local-style paths (e.g. ~/Sync/RetroArch) that expand
+        # to /Users/<name>/...; map those to WebDAV-rooted paths.
+        if path.startswith(f"{home}/"):
+            path = path[len(home) + 1 :]
+        elif path == home:
+            path = ""
 
-        try:
-            common = os.path.commonpath(candidates)
-        except ValueError:
-            return None
-        return Path(common)
+        # Normalize and force WebDAV-root relative path.
+        path = path.lstrip("/")
+        return f"/{path}" if path else "/"
 
-    def _build_upload_name(self, dest_filename: Path):
-        try:
-            if self._upload_root is not None:
-                rel = dest_filename.relative_to(self._upload_root)
-                return rel.as_posix()
-        except Exception:
-            pass
-        return dest_filename.name
-
-    def _http_json(self, method, url, body=None, timeout=4):
-        data = None
-        headers = {}
-        if body is not None:
-            data = json.dumps(body).encode("utf-8")
-            headers["Content-Type"] = "application/json"
-
-        request = urllib.request.Request(url, data=data, headers=headers, method=method)
-        context = ssl._create_unverified_context() if url.startswith("https://") else None
-        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
-            payload = response.read()
-            if not payload:
-                return {}
-            return json.loads(payload.decode("utf-8"))
-
-    def _http_binary(self, method, url, binary, timeout=30):
-        request = urllib.request.Request(
-            url, data=binary, headers={"Content-Type": "application/octet-stream"}, method=method
-        )
-        context = ssl._create_unverified_context() if url.startswith("https://") else None
-        with urllib.request.urlopen(request, timeout=timeout, context=context):
-            return
-
-    def _discover_devices(self, timeout_seconds=3):
-        seen = {}
-        self._status("discovering devices via multicast...")
-        group = socket.inet_aton(self.multicast_addr)
-
-        recv_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        recv_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        try:
-            recv_sock.bind(("", self.port))
-        except OSError:
-            recv_sock.bind(("", 0))
-        mreq = group + socket.inet_aton("0.0.0.0")
-        recv_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
-        recv_sock.settimeout(0.25)
-
-        send_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-        send_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 1)
-
-        announce = dict(self.sender_info)
-        announce["announce"] = True
-        send_sock.sendto(
-            json.dumps(announce).encode("utf-8"),
-            (self.multicast_addr, self.port),
-        )
-
-        deadline = time.time() + timeout_seconds
-        while time.time() < deadline:
-            try:
-                packet, addr = recv_sock.recvfrom(65535)
-            except TimeoutError:
-                continue
-            except OSError:
-                break
-            try:
-                data = json.loads(packet.decode("utf-8"))
-            except Exception:
-                continue
-
-            fingerprint = str(data.get("fingerprint", ""))
-            if not fingerprint or fingerprint == self.sender_info["fingerprint"]:
-                continue
-            ip = addr[0]
-            seen[fingerprint] = {
-                "ip": ip,
-                "port": int(data.get("port", self.port)),
-                "protocol": str(data.get("protocol", "http")),
-                "alias": str(data.get("alias", "")),
-                "fingerprint": fingerprint,
-            }
-
-        recv_sock.close()
-        send_sock.close()
-        devices = list(seen.values())
-        if devices:
-            self._status(f"multicast discovery found {len(devices)} device(s)")
-            return devices
-        self._status("multicast discovery found no devices, trying subnet fallback...")
-        return self._discover_devices_http_fallback()
-
-    def _get_local_ipv4_candidates(self):
-        ips = set()
-        try:
-            for item in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
-                ip = item[4][0]
-                if ip and not ip.startswith("127."):
-                    ips.add(ip)
-        except OSError:
-            pass
-
-        # Primary outbound interface hint.
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            sock.connect(("8.8.8.8", 53))
-            ip = sock.getsockname()[0]
-            if ip and not ip.startswith("127."):
-                ips.add(ip)
-            sock.close()
-        except OSError:
-            pass
-        return sorted(ips)
-
-    def _probe_register(self, ip, port, protocol):
-        base = f"{protocol}://{ip}:{port}"
-        try:
-            response = self._http_json(
-                "POST", f"{base}/api/localsend/v2/register", body=self.sender_info, timeout=0.4
+    def _request_once(self, method, path, body=None, headers=None, ok_codes=(200, 201, 204, 207)):
+        request_headers = dict(headers or {})
+        encoded_path = urllib.parse.quote(path, safe="/")
+        url = f"{self.base_url}{encoded_path}"
+        request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+        logger.debug("TransportWebDAV::_request: method=%s path=%s", method, path)
+        with self._get_thread_opener().open(request, timeout=30) as response:
+            if response.status not in ok_codes:
+                raise RuntimeError(f"WebDAV {method} {path} failed with HTTP {response.status}")
+            logger.debug(
+                "TransportWebDAV::_request: method=%s path=%s status=%s",
+                method,
+                path,
+                response.status,
             )
-        except Exception:
-            return None
 
-        alias = str(response.get("alias", "")).strip()
-        fingerprint = str(response.get("fingerprint", "")).strip()
-        if not alias:
-            return None
-        if fingerprint and fingerprint == self.sender_info["fingerprint"]:
-            return None
-        return {
-            "ip": ip,
-            "port": port,
-            "protocol": protocol,
-            "alias": alias,
-            "fingerprint": fingerprint,
-        }
-
-    def _discover_devices_http_fallback(self):
-        local_ips = self._get_local_ipv4_candidates()
-        if not local_ips:
-            return []
-
-        candidates = set()
-        for ip in local_ips:
-            network = ipaddress.ip_network(f"{ip}/24", strict=False)
-            for host in network.hosts():
-                target = str(host)
-                if target != ip:
-                    candidates.add(target)
-
-        discovered = {}
-        self._status(f"probing LocalSend API on local /24 subnets ({len(candidates)} hosts)...")
-
-        def probe_one(target_ip):
-            for protocol in ["https", "http"]:
-                result = self._probe_register(target_ip, self.port, protocol)
-                if result:
-                    return result
-            return None
-
-        with concurrent.futures.ThreadPoolExecutor(max_workers=64) as executor:
-            futures = [executor.submit(probe_one, ip) for ip in sorted(candidates)]
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
-                if not result:
-                    continue
-                key = result.get("fingerprint") or f'{result["ip"]}:{result["port"]}'
-                discovered[key] = result
-
-        if discovered:
-            self._status(f"subnet fallback found {len(discovered)} device(s)")
-        else:
-            self._status("subnet fallback found no devices")
-        return list(discovered.values())
-
-    def _resolve_target_device(self):
-        if self._cached_device is not None:
-            return self._cached_device
-
-        devices = self._discover_devices()
-        if not devices:
-            print("LocalSend: no devices discovered on the network.")
-            sys.exit(-1)
-
-        needle = self.device_name.lower()
-        exact = [d for d in devices if d["alias"].lower() == needle]
-        if exact:
-            self._status(f"matched device '{exact[0]['alias']}' at {exact[0]['ip']}")
-            self._cached_device = exact[0]
-            return self._cached_device
-
-        partial = [d for d in devices if needle in d["alias"].lower()]
-        if partial:
-            self._status(f"matched device '{partial[0]['alias']}' at {partial[0]['ip']}")
-            self._cached_device = partial[0]
-            return self._cached_device
-
-        aliases = ", ".join(sorted([d["alias"] for d in devices if d["alias"]]))
-        print(f"LocalSend: device '{self.device_name}' not found. Discovered: {aliases}")
-        sys.exit(-1)
-
-    def _register(self, device):
-        base = f'{device["protocol"]}://{device["ip"]}:{device["port"]}'
-        self._http_json(
-            "POST",
-            f"{base}/api/localsend/v2/register",
-            body=self.sender_info,
-        )
-        return base
-
-    def _get_registered_base_url(self):
-        if self._cached_base_url is not None:
-            return self._cached_base_url
-        device = self._resolve_target_device()
-        self._cached_base_url = self._register(device)
-        self._status("connection established")
-        return self._cached_base_url
-
-    def _upload_one(self, base_url, src_filename: Path, dest_filename: Path):
-        file_id = str(uuid.uuid4())
-        upload_name = self._build_upload_name(dest_filename)
-        mime_type = mimetypes.guess_type(upload_name)[0] or "application/octet-stream"
-        file_size = src_filename.stat().st_size
-
-        prepare_body = {
-            "info": self.sender_info,
-            "files": {
-                file_id: {
-                    "id": file_id,
-                    "fileName": upload_name,
-                    "size": file_size,
-                    "fileType": mime_type,
-                }
-            },
-        }
-        prepare = self._http_json(
-            "POST",
-            f"{base_url}/api/localsend/v2/prepare-upload",
-            body=prepare_body,
-        )
-        session_id = prepare.get("sessionId")
-        token = (prepare.get("files") or {}).get(file_id)
-        if not session_id or not token:
-            raise RuntimeError(f"Invalid prepare-upload response for '{src_filename.name}'")
-
-        self._upload_file_with_token(base_url, session_id, file_id, token, src_filename)
-
-    def _upload_file_with_token(self, base_url, session_id, file_id, token, src_filename: Path):
-        with open(src_filename, "rb") as fd:
-            binary = fd.read()
-        query = urllib.parse.urlencode({"sessionId": session_id, "fileId": file_id, "token": token})
-        self._http_binary("POST", f"{base_url}/api/localsend/v2/upload?{query}", binary=binary)
-
-    def _prepare_many(self, base_url, file_items):
-        records = []
-        files = {}
-        for src_filename, dest_filename in file_items:
-            file_id = str(uuid.uuid4())
-            upload_name = self._build_upload_name(dest_filename)
-            mime_type = mimetypes.guess_type(upload_name)[0] or "application/octet-stream"
-            files[file_id] = {
-                "id": file_id,
-                "fileName": upload_name,
-                "size": src_filename.stat().st_size,
-                "fileType": mime_type,
-            }
-            records.append((file_id, src_filename))
-
-        prepare_body = {"info": self.sender_info, "files": files}
-        prepare = self._http_json(
-            "POST",
-            f"{base_url}/api/localsend/v2/prepare-upload",
-            body=prepare_body,
-        )
-        session_id = prepare.get("sessionId")
-        token_map = prepare.get("files") or {}
-        if not session_id or not isinstance(token_map, dict):
-            raise RuntimeError("Invalid prepare-upload response for batch upload")
-        return session_id, token_map, records
-
-    def _upload_many(self, base_url, file_items, callback=None):
-        if not file_items:
+    def _request(self, method, path, body=None, headers=None, ok_codes=(200, 201, 204, 207)):
+        try:
+            self._request_once(method, path, body=body, headers=headers, ok_codes=ok_codes)
             return
-        chunks = [
-            file_items[idx : idx + self.PREPARE_CHUNK_SIZE]
-            for idx in range(0, len(file_items), self.PREPARE_CHUNK_SIZE)
-        ]
+        except urllib.error.HTTPError as exc:
+            if exc.code in ok_codes:
+                return
+            # Some servers advertise digest but fail in challenge flow; retry once
+            # with explicit Basic auth if credentials exist.
+            if exc.code == 401 and self._auth_header:
+                retry_headers = dict(headers or {})
+                retry_headers["Authorization"] = self._auth_header
+                logger.debug(
+                    "TransportWebDAV::_request: 401 for %s %s, retrying with preemptive Basic auth",
+                    method,
+                    path,
+                )
+                try:
+                    self._request_once(
+                        method, path, body=body, headers=retry_headers, ok_codes=ok_codes
+                    )
+                    return
+                except urllib.error.HTTPError as retry_exc:
+                    if retry_exc.code in ok_codes:
+                        return
+                    raise RuntimeError(
+                        f"WebDAV {method} {path} failed with HTTP 401 (Unauthorized). "
+                        "Check [webdav] username/password and target path permissions."
+                    ) from retry_exc
+            if exc.code == 401:
+                raise RuntimeError(
+                    f"WebDAV {method} {path} failed with HTTP 401 (Unauthorized). "
+                    "Check [webdav] username/password and target path permissions."
+                ) from exc
+            raise RuntimeError(f"WebDAV {method} {path} failed with HTTP {exc.code}") from exc
+        except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
+            raise TransportError(
+                "WebDAV connection failed during transfer. "
+                "The target may be offline or unreachable."
+            ) from exc
 
-        for chunk_idx, chunk in enumerate(chunks, start=1):
-            self._status(f"batch preparing chunk {chunk_idx}/{len(chunks)} ({len(chunk)} files)")
-            session_id, token_map, records = self._prepare_many(base_url, chunk)
+    def _mkcol(self, path):
+        try:
+            self._request("MKCOL", path, ok_codes=(201, 301, 405))
+            return
+        except RuntimeError as exc:
+            if self._path_exists(path):
+                logger.debug(
+                    "TransportWebDAV::_mkcol: MKCOL failed but path already exists, continuing path=%s error=%s",
+                    path,
+                    str(exc),
+                )
+                return
+            raise
 
-            for file_id, src_filename in records:
-                token = token_map.get(file_id)
-                if not token:
-                    raise RuntimeError(f"Missing upload token for '{src_filename.name}'")
-                self._upload_file_with_token(base_url, session_id, file_id, token, src_filename)
-                if callback:
-                    callback()
+    def _path_exists(self, path):
+        headers = {"Depth": "0"}
+        try:
+            self._request("PROPFIND", path, headers=headers, ok_codes=(200, 207))
+            return True
+        except Exception:
+            return False
 
-    def copy_file(self, src_filename: Path, dest_filename: Path):
+    def ensure_dir_exists(self, path_directory: Path):
+        if self.dry_run:
+            return
+        remote = self._remote_path(path_directory)
+        parts = [part for part in remote.split("/") if part]
+        current = ""
+        for part in parts:
+            current = f"{current}/{part}"
+            with self._dir_lock:
+                known = current in self._known_dirs
+            if known:
+                logger.debug("TransportWebDAV::ensure_dir_exists: cache hit %s", current)
+                continue
+            if self._path_exists(current):
+                logger.debug("TransportWebDAV::ensure_dir_exists: exists on server %s", current)
+                with self._dir_lock:
+                    self._known_dirs.add(current)
+                continue
+            logger.debug("TransportWebDAV::ensure_dir_exists: creating %s", current)
+            self._mkcol(current)
+            with self._dir_lock:
+                self._known_dirs.add(current)
+
+    def copy_file(self, src_filename: Path, dest_filename: Path, *, ensure_parent=True):
         if self.dry_run:
             logger.debug(
-                f"TransportLocalSend::copy_file: dry-run {src_filename} -> {dest_filename.name}"
+                "TransportWebDAV::copy_file: dry-run %s -> %s", src_filename, dest_filename
             )
             return
-        base_url = self._get_registered_base_url()
-        self._status(f"uploading file '{src_filename.name}'")
-        self._upload_one(base_url, src_filename, dest_filename)
+        if ensure_parent:
+            self.ensure_dir_exists(dest_filename.parent)
+        file_size = src_filename.stat().st_size
+        with open(src_filename, "rb") as fd:
+            data = fd.read()
+        remote = self._remote_path(dest_filename)
+        logger.debug(
+            "TransportWebDAV::copy_file: upload start src=%s dest=%s bytes=%s",
+            src_filename,
+            remote,
+            file_size,
+        )
+        started = time.monotonic()
+        self._request(
+            "PUT", remote, body=data, headers={"Content-Type": "application/octet-stream"}
+        )
+        elapsed = time.monotonic() - started
+        logger.debug(
+            "TransportWebDAV::copy_file: upload done src=%s dest=%s bytes=%s elapsed=%.2fs",
+            src_filename,
+            remote,
+            file_size,
+            elapsed,
+        )
 
     def copy_files(
         self,
@@ -703,47 +576,88 @@ class TransportLocalSend(TransportBase):
         callback=None,
     ):
         if self.dry_run:
-            logger.debug(f"TransportLocalSend::copy_files: dry-run {src_path} -> {dest_path}")
+            logger.debug("TransportWebDAV::copy_files: dry-run %s -> %s", src_path, dest_path)
             return
-        base_url = self._get_registered_base_url()
-        self._status(f"starting upload from '{src_path}'")
 
         if recursive:
             generator = src_path.rglob("*")
         else:
             generator = src_path.glob("*")
 
-        file_items = []
+        files = []
         for src_filename in generator:
             if src_filename.is_dir():
                 continue
             rel = src_filename.relative_to(src_path)
             if self.is_excluded_path(rel):
                 continue
-            if whitelist:
-                matched = False
-                for item in whitelist:
-                    if src_filename.suffix == item:
-                        matched = True
-                        break
-                if not matched:
-                    continue
-            dest_filename = dest_path / rel
-            file_items.append((src_filename, dest_filename))
+            if whitelist and src_filename.suffix not in whitelist:
+                continue
+            files.append((src_filename, dest_path / rel))
 
-        # Fast path: for recursive bulk sync without whitelist, use batched prepare-upload.
-        if recursive and not whitelist:
-            self._status(f"starting batch upload ({len(file_items)} files)")
-            self._upload_many(base_url, file_items, callback=callback)
+        total = len(files)
+        if total == 0:
             return
 
-        for src_filename, dest_filename in file_items:
-            self._upload_one(base_url, src_filename, dest_filename)
-            if callback:
-                callback()
+        # Precreate all parent directories once to avoid repeated MKCOL calls per file.
+        unique_parents = sorted({dest.parent for _, dest in files}, key=lambda p: len(p.parts))
+        for parent in unique_parents:
+            self.ensure_dir_exists(parent)
 
-    def ensure_dir_exists(self, path_directory: Path):
-        return
+        if self.max_workers <= 1 or total == 1:
+            for idx, (src_filename, dest_filename) in enumerate(files, start=1):
+                logger.debug(
+                    "TransportWebDAV::copy_files: [%s/%s] %s -> %s",
+                    idx,
+                    total,
+                    src_filename,
+                    dest_filename,
+                )
+                self.copy_file(src_filename, dest_filename, ensure_parent=False)
+                if callback:
+                    callback()
+            return
+
+        logger.debug(
+            "TransportWebDAV::copy_files: parallel upload workers=%s files=%s",
+            self.max_workers,
+            total,
+        )
+
+        def upload_one(src_filename, dest_filename):
+            self.copy_file(src_filename, dest_filename, ensure_parent=False)
+
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
+        interrupted = False
+        future_to_index = {}
+        try:
+            for idx, (src_filename, dest_filename) in enumerate(files, start=1):
+                logger.debug(
+                    "TransportWebDAV::copy_files: queue [%s/%s] %s -> %s",
+                    idx,
+                    total,
+                    src_filename,
+                    dest_filename,
+                )
+                future = executor.submit(upload_one, src_filename, dest_filename)
+                future_to_index[future] = idx
+
+            for future in concurrent.futures.as_completed(future_to_index):
+                idx = future_to_index[future]
+                future.result()
+                logger.debug("TransportWebDAV::copy_files: completed [%s/%s]", idx, total)
+                if callback:
+                    callback()
+        except KeyboardInterrupt as exc:
+            interrupted = True
+            logger.debug("TransportWebDAV::copy_files: interrupted, cancelling worker futures")
+            for future in future_to_index:
+                future.cancel()
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise TransportError("Transfer interrupted by user.") from exc
+        finally:
+            if not interrupted:
+                executor.shutdown(wait=True, cancel_futures=False)
 
 
 class TransportFileSystemWindows(TransportWindowsBase):
@@ -885,7 +799,7 @@ class TransportSSHWindows(TransportWindowsBase):
             if src_filename.is_dir():
                 if recursive:
                     self.copy_files(
-                        src_filename, dest_path / src_filename.name, whitelist, recursive
+                        src_filename, dest_path / src_filename.name, whitelist, recursive, callback
                     )
                 else:
                     continue
@@ -951,12 +865,13 @@ class BiosSync(GlobalJob):
         self.dst = Path(self.default.get("dest_bios"))
         self.size = self.transport.guess_file_count(self.src, [], True)
 
-    def do(self):
+    def do(self, callback=None):
         self.transport.copy_files(
             self.src,
             self.dst,
             whitelist=[],
             recursive=True,
+            callback=callback,
         )
 
 
@@ -977,7 +892,7 @@ class FavoritesSync(BiosSync):
         self.dst = Path(self.default.get("dest_config")) / "content_favorites.lpl"
         self.size = 1
 
-    def do(self):
+    def do(self, callback=None):
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate(
                 self.src,
@@ -987,6 +902,8 @@ class FavoritesSync(BiosSync):
                 Path(temp_file.name),
                 self.dst,
             )
+            if callback:
+                callback()
 
     def migrate(self, favorites_file, temp_file):
         def find_playlist(playlists, src_core_name):
@@ -1405,50 +1322,44 @@ def expand_config(default):
     return default
 
 
-def normalize_transport_config(config):
+def normalize_transport_config(config, transport_override=None):
     def normalize_mode(value):
         mode = str(value).strip().lower()
-        if mode not in {"filesystem", "ssh", "localsend"}:
+        if mode not in {"filesystem", "ssh", "webdav"}:
             raise ValueError(
-                f"Unsupported transport mode '{value}'. Use filesystem, ssh, or localsend."
+                f"Unsupported transport mode '{value}'. Use filesystem, ssh, or webdav."
             )
         return mode
 
     default = config.get("default", {})
-    default["transport"] = normalize_mode(default.get("transport", "filesystem"))
+    selected_mode = transport_override or default.get("transport", "filesystem")
+    default["transport"] = normalize_mode(selected_mode)
 
     # Preferred split config sections:
     #   [ssh] for hostname/username/password
-    #   [localsend] for device_name/port/multicast_addr
-    # Keep [remote] as backward-compatible fallback.
+    #   [webdav] for host/username/password
+    # Keep [remote] as backward-compatible fallback for SSH.
     ssh = config.get("ssh", {})
-    localsend = config.get("localsend", {})
+    webdav = config.get("webdav", {})
     remote = config.get("remote", {})
 
     section_map = {
         "hostname": ssh,
         "username": ssh,
         "password": ssh,
-        "device_name": localsend,
-        "port": localsend,
-        "multicast_addr": localsend,
     }
     for item, section in section_map.items():
         if item in section:
             default[item] = section.get(item)
         elif item in remote:
             default[item] = remote.get(item)
-        # Legacy LocalSend key names kept for compatibility with older configs.
-        elif item == "port" and "localsend_port" in section:
-            default[item] = section.get("localsend_port")
-        elif item == "multicast_addr" and "localsend_multicast_addr" in section:
-            default[item] = section.get("localsend_multicast_addr")
-        elif item == "port" and "localsend_port" in remote:
-            default[item] = remote.get("localsend_port")
-        elif item == "multicast_addr" and "localsend_multicast_addr" in remote:
-            default[item] = remote.get("localsend_multicast_addr")
         elif item not in default:
             default[item] = ""
+
+    if default["transport"] == "webdav":
+        default["host"] = webdav.get("host", "")
+        default["username"] = webdav.get("username", "")
+        default["password"] = webdav.get("password", "")
 
     return default
 
@@ -1516,6 +1427,13 @@ def normalize_playlists(playlists):
     default="steamdeck.conf",
     help="Use config file",
 )
+@click.option(
+    "--transport",
+    "transport_override",
+    type=click.Choice(["filesystem", "ssh", "webdav"], case_sensitive=False),
+    default=None,
+    help="Override transport mode from config (filesystem, ssh, webdav)",
+)
 @click.option("--dry-run", "-D", is_flag=True, help="Dry run, don't sync or create anything")
 @click.option(
     "--debug",
@@ -1549,6 +1467,7 @@ def main(
     do_update_playlists,
     system_name,
     config_file,
+    transport_override,
     dry_run,
     do_debug,
     force_transport,
@@ -1556,6 +1475,7 @@ def main(
 ):
     global logger
     global transport_status_task_id
+    global transport_file_task_id
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
@@ -1591,7 +1511,12 @@ def main(
         sys.exit(0)
 
     config = toml.load(config_file)
-    default = expand_config(normalize_transport_config(config))
+    normalized_transport_override = (
+        str(transport_override).strip().lower() if transport_override is not None else None
+    )
+    default = expand_config(
+        normalize_transport_config(config, transport_override=normalized_transport_override)
+    )
     playlists = normalize_playlists(config.get("playlists", []))
     if system_name:
         matches = rank_system_matches(system_name, playlists)
@@ -1643,11 +1568,11 @@ def main(
         if not playlist.get("disabled", False):
             systems[name] = {"name": name, "playlist": playlist}
 
-    jobs_size = sum([j.size for j in jobs])
-    system_size = sum([j.size for j in system_jobs])
-    overall_task_id = overall_progress.add_task("", total=jobs_size + system_size)
+    overall_total = len(jobs) + (len(systems) if system_jobs else 0)
+    overall_task_id = overall_progress.add_task("", total=overall_total)
     with Live(progress_group):
         transport_status_task_id = transport_status_progress.add_task("", msg="", visible=False)
+        transport_file_task_id = transport_file_progress.add_task("", total=0, visible=False)
         for (
             idx,
             job,
@@ -1657,7 +1582,17 @@ def main(
             current_task_id = current_system_progress.add_task(f"Run job {job.name}")
             system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
             system_steps_progress.update(system_steps_task_id, advance=1)
-            job.do()
+            begin_transport_file_progress(job.size)
+            try:
+                job.do(callback=lambda: advance_transport_file_progress(1))
+                complete_transport_file_progress()
+            except TransportError as exc:
+                end_transport_file_progress()
+                set_transport_status("")
+                print(f"Transfer aborted: {exc}")
+                sys.exit(-1)
+            finally:
+                end_transport_file_progress()
             if dry_run:
                 time.sleep(0.2)
             system_steps_progress.update(system_steps_task_id, advance=1)
@@ -1699,11 +1634,22 @@ def main(
                         time.sleep(1)
 
                     job.setup(playlist)
-                    job.do(
-                        lambda system_steps_task_id=system_steps_task_id: (
-                            system_steps_progress.update(system_steps_task_id, advance=1)
+                    begin_transport_file_progress(job.size)
+                    try:
+                        job.do(
+                            lambda system_steps_task_id=system_steps_task_id: (
+                                system_steps_progress.update(system_steps_task_id, advance=1),
+                                advance_transport_file_progress(1),
+                            )
                         )
-                    )
+                        complete_transport_file_progress()
+                    except TransportError as exc:
+                        end_transport_file_progress()
+                        set_transport_status("")
+                        print(f"Transfer aborted: {exc}")
+                        sys.exit(-1)
+                    finally:
+                        end_transport_file_progress()
 
                     step_progress.update(step_task_id, advance=1)
                     step_progress.stop_task(step_task_id)
@@ -1724,6 +1670,7 @@ def main(
                 description=f"[bold green]{len(systems)} systems processed, done!",
             )
         transport_status_progress.update(transport_status_task_id, visible=False)
+        transport_file_progress.update(transport_file_task_id, visible=False)
 
 
 if __name__ == "__main__":

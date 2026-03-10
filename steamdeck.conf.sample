@@ -1,5 +1,5 @@
 [default]
-# Select transport mode: filesystem, ssh, or localsend.
+# Select transport mode: filesystem, ssh, or webdav.
 transport = "ssh"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
@@ -21,10 +21,10 @@ hostname = "192.168.1.100"
 username = "deck"
 password = "<password>"
 
-[localsend]
-device_name = ""
-port = 53317
-multicast_addr = "224.0.0.167"
+[webdav]
+host = ""
+username = ""
+password = ""
 
 
 [[playlists]]

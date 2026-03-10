@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+from unittest.mock import Mock
 from retrosync import RomSyncJob, TransportSSHUnix
 
 
@@ -55,4 +56,19 @@ def test_roms_sync_do(default_config, playlist, transport, mocker):
         whitelist=[],
         recursive=True,
         callback=None,
+    )
+
+
+def test_roms_sync_do_forwards_callback(default_config, playlist, transport, mocker):
+    roms_sync = RomSyncJob(default_config, transport)
+    roms_sync.setup(playlist)
+    callback = Mock()
+    mock_copy_files = mocker.patch.object(transport, "copy_files")
+    roms_sync.do(callback=callback)
+    mock_copy_files.assert_called_once_with(
+        Path("tests/assets/roms"),
+        Path("tests/assets/roms"),
+        whitelist=[],
+        recursive=True,
+        callback=callback,
     )

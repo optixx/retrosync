@@ -10,7 +10,7 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 2. Synchronize via SSH ROMs, Bios files and thumbnail
 
 ## Features syncing to iOS devices
-1. Synchronize directly from Desktop to iOS via [LocalSend](https://localsend.org) (`transport = "localsend"`)
+1. Synchronize directly from Desktop to iOS via WebDAV (`transport = "webdav"`)
 2. Synchronize RetroArch playlists, favorites, ROMs, BIOS files and thumbnails
 3. Optional fallback: use `transport = "filesystem"` to prepare files locally for Finder/iCloud/manual transfer
 
@@ -26,7 +26,9 @@ Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlist
 
  Retrosync functions with macOS, Linux, and Windows, relying on previously installed tools such as Secure Shell (SSH) and Rsync, or utilizing pure Python Secure Shell implementations. This means that you need to enable SSH on your Steam Deck if you have not done so already; you can follow this guide for [instructions](https://shendrick.net/Gaming/2022/05/30/sshonsteamdeck.html).
 
-The primary distinction between the two target device groups is transport: Steam Deck typically uses direct SSH sync (`transport = "ssh"`), while iOS can now use direct LocalSend sync (`transport = "localsend"`) using the target `device_name` in the `[remote]` section. If preferred, iOS can still use filesystem export for later transfer via Finder/iCloud.
+The primary distinction between the two target device groups is transport: Steam Deck typically uses direct SSH sync (`transport = "ssh"`), while iOS uses direct WebDAV sync (`transport = "webdav"`) using credentials in the `[webdav]` section. If preferred, iOS can still use filesystem export for later transfer via Finder/iCloud.
+
+LocalSend transport support has been removed.
 
 
 
@@ -48,7 +50,7 @@ In this sample configuration, a setup is provided for your local desktop's Retro
 ```toml
 
 [default]
-# Select transport mode: filesystem, ssh, or localsend.
+# Select transport mode: filesystem, ssh, or webdav.
 transport = "ssh"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
@@ -66,12 +68,16 @@ target_roms =  "/home/deck/Emulation/roms"
 target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 target_flavor = "linux"
 
-[remote]
+[ssh]
 hostname = "192.168.1.100"
 username = "deck"
 password = "<password>"
-# Required only for transport = "localsend"
-device_name = "iPhone von David"
+
+[webdav]
+# Required only for transport = "webdav"
+host = "http://192.168.1.200:8080"
+username = "ios-user"
+password = "<password>"
 
 
 [[playlists]]
@@ -125,6 +131,25 @@ src_core_name = "Commodore - Amiga (PUAE)"
 
 ```
 
+### WebDAV Configuration
+
+Use `transport = "webdav"` in `[default]` and provide credentials in `[webdav]`.
+
+```toml
+[default]
+transport = "webdav"
+
+[webdav]
+host = "http://your-webdav-host:port"
+username = "your-user"
+password = "your-password"
+```
+
+Notes:
+- `host` may include a base path, for example `http://host:8080/remote.php/dav/files/user`.
+- Destination paths (`dest_*`) are interpreted as remote WebDAV paths.
+- If `dest_*` values expand to local home paths (for example `~/Sync/...`), Retrosync maps them to WebDAV-rooted paths (for example `/Sync/...`).
+
 Notes:
 - `dest_folder` is optional. If omitted, Retrosync uses `src_folder`.
 - Use `dest_folder` only when target folder names differ (for example Steam Deck short names like `psx`, `gba`).
@@ -136,10 +161,16 @@ Notes:
 
 ![Usage](https://github.com/optixx/retrosync/raw/main/assets/img/usage.png)
 
- To synchronize all your playlists (as defined in your TOML configuration file) and ROMs onto your Steam Deck, simply execute the following command:
+To synchronize all your playlists (as defined in your TOML configuration file) and ROMs onto your Steam Deck, simply execute the following command:
 
 ```sh
 python retrosync.py --sync-roms --sync-playlists
+```
+
+To override transport from CLI without editing config:
+
+```sh
+python retrosync.py --sync-roms --sync-playlists --transport webdav
 ```
 
  To view extensive information regarding current operations, include `--debug` in your command to generate detailed logs within a `debug.log` file.

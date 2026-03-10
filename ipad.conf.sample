@@ -1,5 +1,5 @@
 [default]
-transport = "localsend"
+transport = "webdav"
 
 src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Dropbox/Software/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
@@ -17,10 +17,11 @@ hostname = ""
 username = ""
 password = ""
 
-[localsend]
-device_name = ""
-port = 53317
-multicast_addr = "224.0.0.167"
+[webdav]
+host = ""
+username = ""
+password = ""
+
 
 [[playlists]]
 name = "Atari - 2600.lpl"

@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+from unittest.mock import Mock
 from retrosync import ThumbnailsSync, TransportSSHUnix
 
 
@@ -69,4 +70,23 @@ def test_thumbnails_sync_do(default_config, playlists, dry_run, mocker):
         thumbnails_sync.dst,
         whitelist=[],
         recursive=True,
+        callback=None,
+    )
+
+
+def test_thumbnails_sync_do_forwards_callback(default_config, playlists, dry_run, mocker):
+    transport = TransportSSHUnix(default_config, dry_run)
+    thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
+    thumbnails_sync.setup()
+    callback = Mock()
+
+    mock_copy_files = mocker.patch.object(transport, "copy_files")
+    thumbnails_sync.do(callback=callback)
+
+    mock_copy_files.assert_called_once_with(
+        thumbnails_sync.src,
+        thumbnails_sync.dst,
+        whitelist=[],
+        recursive=True,
+        callback=callback,
     )

@@ -1,5 +1,6 @@
 import pytest
 from pathlib import Path
+from unittest.mock import Mock
 from retrosync import BiosSync, TransportSSHUnix
 
 
@@ -54,4 +55,20 @@ def test_bios_sync_do(default_config, playlists, transport, mocker):
         Path("tests/assets/bios"),
         whitelist=[],
         recursive=True,
+        callback=None,
+    )
+
+
+def test_bios_sync_do_forwards_callback(default_config, playlists, transport, mocker):
+    bios_sync = BiosSync(default_config, playlists, transport)
+    bios_sync.setup()
+    callback = Mock()
+    mock_copy_files = mocker.patch.object(transport, "copy_files")
+    bios_sync.do(callback=callback)
+    mock_copy_files.assert_called_once_with(
+        Path("tests/assets/bios"),
+        Path("tests/assets/bios"),
+        whitelist=[],
+        recursive=True,
+        callback=callback,
     )
