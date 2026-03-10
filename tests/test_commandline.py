@@ -60,14 +60,31 @@ def test_prompt_shows_multiple_matches():
         "default": {
             "transport": "filesystem",
             "src_roms": ["tests/assets/roms"],
+            "src_playlists": "tests/assets/playlists",
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
         },
         "playlists": [
-            {"name": "Nintendo - NES.lpl", "src_folder": "nes", "dest_folder": "nes"},
-            {"name": "Nintendo - SNES.lpl", "src_folder": "snes", "dest_folder": "snes"},
+            {
+                "name": "Nintendo - NES.lpl",
+                "src_folder": "nes",
+                "dest_folder": "nes",
+                "src_core_path": "core1",
+                "src_core_name": "Core 1",
+            },
+            {
+                "name": "Nintendo - SNES.lpl",
+                "src_folder": "snes",
+                "dest_folder": "snes",
+                "src_core_path": "core2",
+                "src_core_name": "Core 2",
+            },
             {
                 "name": "FBNeo - Arcade Games.lpl",
                 "src_folder": "fbneo",
                 "dest_folder": "fbneo",
+                "src_core_path": "core3",
+                "src_core_name": "Core 3",
             },
         ],
     }

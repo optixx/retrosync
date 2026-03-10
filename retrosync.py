@@ -29,6 +29,7 @@ import urllib.request
 import urllib.error
 import paramiko
 import Levenshtein
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from lxml import etree
 from pathlib import Path
 from collections import defaultdict
@@ -1202,6 +1203,144 @@ class PlaylistUpdatecJob(PlaylistUpdateJob):
     pass
 
 
+class RuntimeConfigModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    transport: str = "filesystem"
+    hostname: str | None = None
+    username: str | None = None
+    password: str | None = None
+    host: str | None = None
+    src_roms: list[str] = Field(default_factory=list)
+    src_playlists: str | None = None
+    src_bios: str | None = None
+    src_config: str | None = None
+    src_thumbnails: str | None = None
+    src_cores: str | None = None
+    src_cores_suffix: str | None = None
+    dest_playlists: str | None = None
+    dest_roms: str | None = None
+    dest_bios: str | None = None
+    dest_config: str | None = None
+    dest_thumbnails: str | None = None
+    target_roms: str | None = None
+    target_cores: str | None = None
+    target_cores_suffix: str | None = None
+
+
+class PlaylistConfigModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    src_folder: str | None = None
+    dest_folder: str | None = None
+    src_core_path: str | None = None
+    src_core_name: str | None = None
+    disabled: bool = False
+
+
+def validate_runtime_config(
+    default,
+    playlists,
+    *,
+    do_sync_playlists: bool,
+    do_sync_bios: bool,
+    do_sync_favorites: bool,
+    do_sync_thumbnails: bool,
+    do_sync_roms: bool,
+    do_update_playlists: bool,
+):
+    errors = []
+    try:
+        runtime = RuntimeConfigModel.model_validate(default)
+    except ValidationError as exc:
+        raise ValueError(str(exc)) from exc
+
+    parsed_playlists = []
+    for idx, playlist in enumerate(playlists, start=1):
+        try:
+            parsed_playlists.append(PlaylistConfigModel.model_validate(playlist))
+        except ValidationError as exc:
+            errors.append(f"[playlists][{idx}] {exc.errors()[0].get('msg', 'invalid entry')}")
+
+    def require_default(key, reason):
+        value = default.get(key)
+        missing = value is None
+        if isinstance(value, str):
+            missing = value.strip() == ""
+        elif isinstance(value, list):
+            missing = len(value) == 0
+        if missing:
+            errors.append(f"[default] '{key}' is required for {reason}")
+
+    def require_playlist_attr(attr, reason, allow_empty=False):
+        for idx, playlist in enumerate(parsed_playlists, start=1):
+            if playlist.disabled:
+                continue
+            value = getattr(playlist, attr)
+            if value is None:
+                errors.append(f"[playlists][{idx}] '{attr}' is required for {reason}")
+            elif isinstance(value, str) and not allow_empty and value.strip() == "":
+                errors.append(f"[playlists][{idx}] '{attr}' must not be empty for {reason}")
+
+    if runtime.transport == "ssh":
+        require_default("hostname", "SSH transport")
+        require_default("username", "SSH transport")
+        require_default("password", "SSH transport")
+    elif runtime.transport == "webdav":
+        require_default("host", "WebDAV transport")
+
+    if do_sync_bios:
+        require_default("src_bios", "--sync-bios")
+        require_default("dest_bios", "--sync-bios")
+
+    if do_sync_favorites:
+        require_default("src_config", "--sync-favorites")
+        require_default("dest_config", "--sync-favorites")
+        require_default("target_roms", "--sync-favorites")
+        require_default("target_cores", "--sync-favorites")
+        require_default("src_cores", "--sync-favorites")
+        require_default("src_cores_suffix", "--sync-favorites")
+        require_default("target_cores_suffix", "--sync-favorites")
+        require_playlist_attr("src_core_name", "--sync-favorites")
+        require_playlist_attr("dest_folder", "--sync-favorites", allow_empty=True)
+
+    if do_sync_thumbnails:
+        require_default("src_thumbnails", "--sync-thumbnails")
+        require_default("dest_thumbnails", "--sync-thumbnails")
+
+    needs_system_jobs = do_sync_playlists or do_sync_roms or do_update_playlists
+    if needs_system_jobs and parsed_playlists:
+        require_playlist_attr("name", "system jobs")
+        require_playlist_attr("src_folder", "system jobs", allow_empty=True)
+        require_playlist_attr("dest_folder", "system jobs", allow_empty=True)
+
+    if do_sync_roms and parsed_playlists:
+        require_default("src_roms", "--sync-roms")
+        require_default("dest_roms", "--sync-roms")
+
+    if do_sync_playlists and parsed_playlists:
+        require_default("src_playlists", "--sync-playlists")
+        require_default("dest_playlists", "--sync-playlists")
+        require_default("src_roms", "--sync-playlists")
+        require_default("target_roms", "--sync-playlists")
+        require_default("src_cores", "--sync-playlists")
+        require_default("target_cores", "--sync-playlists")
+        require_default("src_cores_suffix", "--sync-playlists")
+        require_default("target_cores_suffix", "--sync-playlists")
+
+    if do_update_playlists and parsed_playlists:
+        require_default("src_playlists", "--update-playlists")
+        require_default("src_roms", "--update-playlists")
+        require_default("src_cores", "--update-playlists")
+        require_default("src_cores_suffix", "--update-playlists")
+        require_playlist_attr("src_core_path", "--update-playlists")
+        require_playlist_attr("src_core_name", "--update-playlists")
+
+    if errors:
+        raise ValueError("Invalid configuration:\n- " + "\n- ".join(errors))
+
+
 def rank_system_matches(system_name, playlists, limit=8):
     if not system_name:
         return []
@@ -1536,14 +1675,28 @@ def main(
         click.echo(click.get_current_context().get_help())
         sys.exit(0)
 
-    config = toml.load(config_file)
-    normalized_transport_override = (
-        str(transport_override).strip().lower() if transport_override is not None else None
-    )
-    default = expand_config(
-        normalize_transport_config(config, transport_override=normalized_transport_override)
-    )
-    playlists = normalize_playlists(config.get("playlists", []))
+    try:
+        config = toml.load(config_file)
+        normalized_transport_override = (
+            str(transport_override).strip().lower() if transport_override is not None else None
+        )
+        default = expand_config(
+            normalize_transport_config(config, transport_override=normalized_transport_override)
+        )
+        playlists = normalize_playlists(config.get("playlists", []))
+        validate_runtime_config(
+            default,
+            playlists,
+            do_sync_playlists=do_sync_playlists,
+            do_sync_bios=do_sync_bios,
+            do_sync_favorites=do_sync_favorites,
+            do_sync_thumbnails=do_sync_thumbails,
+            do_sync_roms=do_sync_roms,
+            do_update_playlists=do_update_playlists,
+        )
+    except ValueError as exc:
+        print(str(exc))
+        sys.exit(-1)
     if system_name:
         matches = rank_system_matches(system_name, playlists)
         if not matches:
