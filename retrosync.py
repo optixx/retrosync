@@ -211,6 +211,13 @@ def main(
     yes,
 ):
     global logger
+
+    def abort_with_cleanup(message):
+        set_transport_status("")
+        hide_transport_tasks()
+        print(message)
+        sys.exit(-1)
+
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
@@ -322,100 +329,109 @@ def main(
     overall_task_id = overall_progress.add_task("", total=overall_total)
     with Live(progress_group):
         init_live_tasks()
-        for (
-            idx,
-            job,
-        ) in enumerate(jobs):
-            top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
-            overall_progress.update(overall_task_id, description=top_descr)
-            current_task_id = current_system_progress.add_task(f"Run job {job.name}")
-            system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
-            system_steps_progress.update(system_steps_task_id, advance=1)
-            begin_transport_file_progress(job.size)
-            try:
-                job.do(callback=lambda: advance_transport_file_progress(1))
-                complete_transport_file_progress()
-            except TransportError as exc:
-                hide_transport_tasks()
-                print(f"Transfer aborted: {exc}")
-                sys.exit(-1)
-            finally:
-                end_transport_file_progress()
-            if dry_run:
-                time.sleep(0.2)
-            system_steps_progress.update(system_steps_task_id, advance=1)
-            system_steps_progress.update(system_steps_task_id, visible=False)
-            current_system_progress.stop_task(current_task_id)
-            current_system_progress.update(
-                current_task_id, description=f"[bold green]{job.name} synced!"
-            )
-            overall_progress.update(overall_task_id, advance=1)
-
-        overall_progress.update(
-            overall_task_id,
-            description=f"[bold green]{len(jobs)} jobs processed, done!",
-        )
-
-        if do_update_playlists or do_sync_playlists or do_sync_roms:
+        try:
             for (
                 idx,
-                key,
-            ) in enumerate(systems.keys()):
-                name = systems[key]["name"]
-                playlist = systems[key]["playlist"]
-                logger.info("main: Process %s", playlist.get("name"))
-                top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
+                job,
+            ) in enumerate(jobs):
+                top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
                 overall_progress.update(overall_task_id, description=top_descr)
-                current_task_id = current_system_progress.add_task(f"Syncing system {name}")
-
-                system_jobs_size = 0
-                for job in system_jobs:
-                    job.setup(playlist)
-                    system_jobs_size += job.size
-
-                system_steps_task_id = system_steps_progress.add_task(
-                    "", total=system_jobs_size, name=name
-                )
-                for job in system_jobs:
-                    step_task_id = step_progress.add_task("", action=job.name, name=name)
-                    if do_debug:
-                        time.sleep(1)
-
-                    job.setup(playlist)
-                    begin_transport_file_progress(job.size)
-                    try:
-                        job.do(
-                            lambda system_steps_task_id=system_steps_task_id: (
-                                system_steps_progress.update(system_steps_task_id, advance=1),
-                                advance_transport_file_progress(1),
-                            )
-                        )
-                        complete_transport_file_progress()
-                    except TransportError as exc:
-                        hide_transport_tasks()
-                        print(f"Transfer aborted: {exc}")
-                        sys.exit(-1)
-                    finally:
-                        end_transport_file_progress()
-
-                    step_progress.update(step_task_id, advance=1)
-                    step_progress.stop_task(step_task_id)
-                    step_progress.update(step_task_id, visible=False)
-
+                current_task_id = current_system_progress.add_task(f"Run job {job.name}")
+                system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
+                system_steps_progress.update(system_steps_task_id, advance=1)
+                begin_transport_file_progress(job.size)
+                try:
+                    job.do(callback=lambda: advance_transport_file_progress(1))
+                    complete_transport_file_progress()
+                except TransportError as exc:
+                    interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
+                        "interrupted by user" in str(exc).lower()
+                    )
+                    if interrupted:
+                        abort_with_cleanup("Stopping workers...")
+                    abort_with_cleanup(f"Transfer aborted: {exc}")
+                finally:
+                    end_transport_file_progress()
                 if dry_run:
                     time.sleep(0.2)
+                system_steps_progress.update(system_steps_task_id, advance=1)
                 system_steps_progress.update(system_steps_task_id, visible=False)
                 current_system_progress.stop_task(current_task_id)
                 current_system_progress.update(
-                    current_task_id, description=f"[bold green]{name} synced!"
+                    current_task_id, description=f"[bold green]{job.name} synced!"
                 )
                 overall_progress.update(overall_task_id, advance=1)
 
             overall_progress.update(
                 overall_task_id,
-                description=f"[bold green]{len(systems)} systems processed, done!",
+                description=f"[bold green]{len(jobs)} jobs processed, done!",
             )
-        hide_transport_tasks()
+
+            if do_update_playlists or do_sync_playlists or do_sync_roms:
+                for (
+                    idx,
+                    key,
+                ) in enumerate(systems.keys()):
+                    name = systems[key]["name"]
+                    playlist = systems[key]["playlist"]
+                    logger.info("main: Process %s", playlist.get("name"))
+                    top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
+                    overall_progress.update(overall_task_id, description=top_descr)
+                    current_task_id = current_system_progress.add_task(f"Syncing system {name}")
+
+                    system_jobs_size = 0
+                    for job in system_jobs:
+                        job.setup(playlist)
+                        system_jobs_size += job.size
+
+                    system_steps_task_id = system_steps_progress.add_task(
+                        "", total=system_jobs_size, name=name
+                    )
+                    for job in system_jobs:
+                        step_task_id = step_progress.add_task("", action=job.name, name=name)
+                        if do_debug:
+                            time.sleep(1)
+
+                        job.setup(playlist)
+                        begin_transport_file_progress(job.size)
+                        try:
+                            job.do(
+                                lambda system_steps_task_id=system_steps_task_id: (
+                                    system_steps_progress.update(system_steps_task_id, advance=1),
+                                    advance_transport_file_progress(1),
+                                )
+                            )
+                            complete_transport_file_progress()
+                        except TransportError as exc:
+                            interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
+                                "interrupted by user" in str(exc).lower()
+                            )
+                            if interrupted:
+                                abort_with_cleanup("Stopping workers...")
+                            abort_with_cleanup(f"Transfer aborted: {exc}")
+                        finally:
+                            end_transport_file_progress()
+
+                        step_progress.update(step_task_id, advance=1)
+                        step_progress.stop_task(step_task_id)
+                        step_progress.update(step_task_id, visible=False)
+
+                    if dry_run:
+                        time.sleep(0.2)
+                    system_steps_progress.update(system_steps_task_id, visible=False)
+                    current_system_progress.stop_task(current_task_id)
+                    current_system_progress.update(
+                        current_task_id, description=f"[bold green]{name} synced!"
+                    )
+                    overall_progress.update(overall_task_id, advance=1)
+
+                overall_progress.update(
+                    overall_task_id,
+                    description=f"[bold green]{len(systems)} systems processed, done!",
+                )
+            hide_transport_tasks()
+        except KeyboardInterrupt:
+            abort_with_cleanup("Stopping workers...")
 
 
 if __name__ == "__main__":
