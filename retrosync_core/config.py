@@ -1,8 +1,9 @@
 import re
-from pathlib import Path
 
 import Levenshtein
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
+
+from .paths import expand_user_path, expand_user_path_list, retroarch_derived_paths
 
 
 class RuntimeConfigModel(BaseModel):
@@ -141,14 +142,7 @@ def expand_config(default):
         if not base:
             return
 
-        base_path = Path(base)
-        derived = {
-            f"{prefix}_playlists": base_path / "playlists",
-            f"{prefix}_bios": base_path / "system",
-            f"{prefix}_config": base_path / "config",
-            f"{prefix}_cores": base_path / "cores",
-            f"{prefix}_thumbnails": base_path / "thumbnails",
-        }
+        derived = retroarch_derived_paths(base, prefix=prefix)
 
         for key, value in derived.items():
             if default.get(key) is None:
@@ -158,12 +152,7 @@ def expand_config(default):
     ensure_retroarch_paths("dest")
     apply_core_flavor_defaults()
 
-    src_roms = default.get("src_roms")
-    if isinstance(src_roms, list):
-        expanded_src_roms = [str(Path(item).expanduser()) for item in src_roms]
-    else:
-        expanded_src_roms = [str(Path(src_roms).expanduser())]
-    default["src_roms"] = expanded_src_roms
+    default["src_roms"] = expand_user_path_list(default.get("src_roms"))
 
     for item in [
         "src_playlists",
@@ -178,7 +167,7 @@ def expand_config(default):
         "dest_thumbnails",
     ]:
         if default.get(item) is not None:
-            default[item] = str(Path(default.get(item)).expanduser())
+            default[item] = expand_user_path(default.get(item))
     return default
 
 

@@ -65,6 +65,12 @@ from retrosync_core.ui import (
     step_progress,
     system_steps_progress,
 )
+from retrosync_core.paths import (
+    expand_user_path,
+    expand_user_path_list,
+    normalize_webdav_remote_path,
+    retroarch_derived_paths,
+)
 
 logger = logging.getLogger()
 
@@ -98,6 +104,10 @@ __all__ = [
     "normalize_transport_config",
     "rank_system_matches",
     "validate_runtime_config",
+    "expand_user_path",
+    "expand_user_path_list",
+    "normalize_webdav_remote_path",
+    "retroarch_derived_paths",
     "begin_transport_file_progress",
     "advance_transport_file_progress",
     "complete_transport_file_progress",

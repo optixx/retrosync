@@ -16,6 +16,8 @@ from pathlib import Path
 
 import paramiko
 
+from .paths import normalize_webdav_remote_path
+
 logger = logging.getLogger()
 
 GLOBAL_EXCLUDE_PATTERNS = [
@@ -299,16 +301,7 @@ class TransportWebDAV(TransportBase):
         return opener
 
     def _remote_path(self, path_value: Path):
-        path = path_value.as_posix()
-        home = Path.home().as_posix()
-
-        if path.startswith(f"{home}/"):
-            path = path[len(home) + 1 :]
-        elif path == home:
-            path = ""
-
-        path = path.lstrip("/")
-        return f"/{path}" if path else "/"
+        return normalize_webdav_remote_path(path_value)
 
     def _request_once(self, method, path, body=None, headers=None, ok_codes=(200, 201, 204, 207)):
         request_headers = dict(headers or {})

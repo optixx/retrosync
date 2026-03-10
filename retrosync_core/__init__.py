@@ -7,6 +7,12 @@ from .config import (
     rank_system_matches,
     validate_runtime_config,
 )
+from .paths import (
+    expand_user_path,
+    expand_user_path_list,
+    normalize_webdav_remote_path,
+    retroarch_derived_paths,
+)
 from .jobs import (
     BiosSync,
     FavoritesSync,
@@ -78,6 +84,10 @@ __all__ = [
     "normalize_transport_config",
     "rank_system_matches",
     "validate_runtime_config",
+    "expand_user_path",
+    "expand_user_path_list",
+    "normalize_webdav_remote_path",
+    "retroarch_derived_paths",
     "begin_transport_file_progress",
     "advance_transport_file_progress",
     "complete_transport_file_progress",
