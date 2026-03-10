@@ -40,6 +40,7 @@ from retrosync_core.jobs import (
 from retrosync_core.transports import (
     GLOBAL_EXCLUDE_PATTERNS,
     TransportBase,
+    TransportCapabilities,
     TransportError,
     TransportFactory,
     TransportFileSystemUnix,
@@ -77,6 +78,7 @@ logger = logging.getLogger()
 __all__ = [
     "GLOBAL_EXCLUDE_PATTERNS",
     "TransportBase",
+    "TransportCapabilities",
     "TransportError",
     "TransportFactory",
     "TransportFileSystemUnix",
@@ -307,6 +309,9 @@ def main(
 
     jobs = []
     transport = TransportFactory(default, dry_run, force_transport)
+    supports_per_file_progress = getattr(
+        getattr(transport, "capabilities", None), "per_file_callback", True
+    )
     if do_sync_bios:
         jobs.append(BiosSync(default, playlists, transport))
 
@@ -339,6 +344,8 @@ def main(
     overall_task_id = overall_progress.add_task("", total=overall_total)
     with Live(progress_group):
         init_live_tasks()
+        if not supports_per_file_progress:
+            set_transport_status("Per-file progress unavailable; using per-job progress.")
         try:
             for (
                 idx,
@@ -349,9 +356,16 @@ def main(
                 current_task_id = current_system_progress.add_task(f"Run job {job.name}")
                 system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
                 system_steps_progress.update(system_steps_task_id, advance=1)
-                begin_transport_file_progress(job.size)
+                begin_transport_file_progress(job.size if supports_per_file_progress else 1)
                 try:
-                    job.do(callback=lambda: advance_transport_file_progress(1))
+                    callback = (
+                        (lambda: advance_transport_file_progress(1))
+                        if supports_per_file_progress
+                        else None
+                    )
+                    job.do(callback=callback)
+                    if not supports_per_file_progress:
+                        advance_transport_file_progress(1)
                     complete_transport_file_progress()
                 except TransportError as exc:
                     interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
@@ -392,10 +406,14 @@ def main(
                     system_jobs_size = 0
                     for job in system_jobs:
                         job.setup(playlist)
-                        system_jobs_size += job.size
+                    system_jobs_size += job.size
 
+                    if supports_per_file_progress:
+                        system_steps_total = system_jobs_size
+                    else:
+                        system_steps_total = len(system_jobs)
                     system_steps_task_id = system_steps_progress.add_task(
-                        "", total=system_jobs_size, name=name
+                        "", total=system_steps_total, name=name
                     )
                     for job in system_jobs:
                         step_task_id = step_progress.add_task("", action=job.name, name=name)
@@ -403,14 +421,24 @@ def main(
                             time.sleep(1)
 
                         job.setup(playlist)
-                        begin_transport_file_progress(job.size)
+                        begin_transport_file_progress(job.size if supports_per_file_progress else 1)
                         try:
-                            job.do(
-                                lambda system_steps_task_id=system_steps_task_id: (
-                                    system_steps_progress.update(system_steps_task_id, advance=1),
-                                    advance_transport_file_progress(1),
+                            callback = (
+                                (
+                                    lambda system_steps_task_id=system_steps_task_id: (
+                                        system_steps_progress.update(
+                                            system_steps_task_id, advance=1
+                                        ),
+                                        advance_transport_file_progress(1),
+                                    )
                                 )
+                                if supports_per_file_progress
+                                else None
                             )
+                            job.do(callback)
+                            if not supports_per_file_progress:
+                                system_steps_progress.update(system_steps_task_id, advance=1)
+                                advance_transport_file_progress(1)
                             complete_transport_file_progress()
                         except TransportError as exc:
                             interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (

@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 import paramiko
@@ -37,6 +38,16 @@ GLOBAL_EXCLUDE_PATTERNS = [
 
 class TransportError(Exception):
     pass
+
+
+@dataclass(frozen=True)
+class TransportCapabilities:
+    per_file_callback: bool = False
+    preserves_mtime: bool = False
+    size_aware_skip: bool = False
+    atomic_upload: bool = False
+    parallel_upload: bool = False
+    server_side_mkdir_cacheable: bool = False
 
 
 def get_transport_mode(default):
@@ -76,6 +87,8 @@ class TransportFactory:
 
 
 class TransportBase:
+    capabilities = TransportCapabilities()
+
     def is_excluded_path(self, path: Path):
         for part in path.parts:
             for pattern in GLOBAL_EXCLUDE_PATTERNS:
@@ -106,6 +119,15 @@ class TransportBase:
 
 
 class TransportUnixBase(TransportBase):
+    capabilities = TransportCapabilities(
+        per_file_callback=False,
+        preserves_mtime=True,
+        size_aware_skip=True,
+        atomic_upload=False,
+        parallel_upload=False,
+        server_side_mkdir_cacheable=False,
+    )
+
     @staticmethod
     def getInstance(default, dry_run):
         if get_transport_mode(default) == "ssh":
@@ -240,6 +262,14 @@ class TransportWindowsBase(TransportBase):
 
 class TransportWebDAV(TransportBase):
     DEFAULT_MAX_WORKERS = 4
+    capabilities = TransportCapabilities(
+        per_file_callback=True,
+        preserves_mtime=False,
+        size_aware_skip=False,
+        atomic_upload=False,
+        parallel_upload=True,
+        server_side_mkdir_cacheable=True,
+    )
 
     def __init__(self, default, dry_run):
         self.default = default
@@ -538,6 +568,15 @@ class TransportWebDAV(TransportBase):
 
 
 class TransportFileSystemWindows(TransportWindowsBase):
+    capabilities = TransportCapabilities(
+        per_file_callback=True,
+        preserves_mtime=True,
+        size_aware_skip=False,
+        atomic_upload=True,
+        parallel_upload=False,
+        server_side_mkdir_cacheable=False,
+    )
+
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
@@ -593,6 +632,15 @@ class TransportFileSystemWindows(TransportWindowsBase):
 
 
 class TransportSSHWindows(TransportWindowsBase):
+    capabilities = TransportCapabilities(
+        per_file_callback=True,
+        preserves_mtime=False,
+        size_aware_skip=True,
+        atomic_upload=False,
+        parallel_upload=False,
+        server_side_mkdir_cacheable=False,
+    )
+
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
@@ -673,8 +721,6 @@ class TransportSSHWindows(TransportWindowsBase):
             logger.debug(
                 f"TransportSSHWindows::copy_files: [{cnt}/{guessed_len}] {src_filename.name}"
             )
-            if callback:
-                callback()
             if self.is_excluded_path(src_filename.relative_to(src_path)):
                 logger.debug(f"TransportSSHWindows::copy_files: excluded {src_filename}")
                 continue
@@ -723,3 +769,5 @@ class TransportSSHWindows(TransportWindowsBase):
                     logger.debug(
                         f"TransportSSHWindows::copy_files: create {src_filename} to {dest_filename}"
                     )
+                if callback:
+                    callback()

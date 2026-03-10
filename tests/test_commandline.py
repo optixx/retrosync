@@ -226,3 +226,56 @@ def test_rom_sync_advances_transport_file_progress_hooks():
     begin_mock.assert_called_once_with(2)
     assert advance_mock.call_count == 2
     complete_mock.assert_called_once()
+
+
+def test_rom_sync_falls_back_to_per_job_progress_when_no_per_file_callbacks():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_roms": ["tests/assets/roms"],
+            "dest_roms": "tests/assets/roms",
+        },
+        "playlists": [
+            {"name": "FBNeo - Arcade Games.lpl", "src_folder": "", "dest_folder": ""},
+        ],
+    }
+    fake_transport = Mock()
+    fake_transport.capabilities = Mock(per_file_callback=False)
+
+    class FakeRomSyncJob:
+        name = "Sync ROMs"
+
+        def __init__(self, default, transport):
+            self.default = default
+            self.transport = transport
+            self.size = 0
+
+        def setup(self, _playlist):
+            self.size = 5
+
+        def do(self, callback):
+            if callback:
+                callback()
+                callback()
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.RomSyncJob", FakeRomSyncJob),
+        patch("retrosync.begin_transport_file_progress") as begin_mock,
+        patch("retrosync.advance_transport_file_progress") as advance_mock,
+        patch("retrosync.complete_transport_file_progress") as complete_mock,
+    ):
+        run_cli_tool(
+            [
+                "retrosync.py",
+                "--dry-run",
+                "--sync-roms",
+                "--yes",
+                "--config-file=ignored.conf",
+            ]
+        )
+
+    begin_mock.assert_called_once_with(1)
+    assert advance_mock.call_count == 1
+    complete_mock.assert_called_once()

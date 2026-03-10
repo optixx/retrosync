@@ -2,10 +2,12 @@ import pytest
 from pathlib import Path
 from unittest.mock import patch, Mock
 import urllib.error
+from types import SimpleNamespace
 
 from retrosync import (
     TransportFactory,
     TransportFileSystemUnix,
+    TransportCapabilities,
     TransportError,
     TransportWebDAV,
     TransportSSHUnix,
@@ -185,6 +187,92 @@ def test_transport_windows_local_copy_files_respects_whitelist(tmp_path, default
 
     assert (dest / "good.rom").exists()
     assert not (dest / "skip.txt").exists()
+
+
+def test_transport_windows_local_copy_files_callback_only_for_processed_files(
+    tmp_path, default_config
+):
+    src = tmp_path / "src"
+    dest = tmp_path / "dest"
+    src.mkdir()
+    (src / "good.rom").write_text("ok", encoding="utf-8")
+    (src / "skip.txt").write_text("no", encoding="utf-8")
+    callback = Mock()
+
+    transport = TransportFileSystemWindows(default_config, dry_run=False)
+    transport.copy_files(src, dest, whitelist=[".rom"], recursive=False, callback=callback)
+
+    callback.assert_called_once()
+
+
+def test_transport_ssh_windows_copy_files_callback_only_for_processed_files(
+    tmp_path, default_config
+):
+    src = tmp_path / "src"
+    dest = tmp_path / "dest"
+    src.mkdir()
+    (src / "keep.rom").write_text("ok", encoding="utf-8")
+    (src / "skip.txt").write_text("no", encoding="utf-8")
+    (src / "subdir").mkdir()
+    callback = Mock()
+
+    transport = TransportSSHWindows(default_config, dry_run=False)
+    transport.connected = True
+    transport.connect = Mock()
+    transport.sftp = Mock()
+
+    keep_src_stat = (src / "keep.rom").stat()
+
+    def fake_stat(path_str):
+        if path_str == str(dest):
+            return SimpleNamespace()
+        if path_str == str(dest / "keep.rom"):
+            return SimpleNamespace(
+                st_mtime=int(keep_src_stat.st_mtime), st_size=keep_src_stat.st_size
+            )
+        raise FileNotFoundError
+
+    transport.sftp.stat.side_effect = fake_stat
+    transport.copy_files(src, dest, whitelist=[".rom"], recursive=False, callback=callback)
+
+    callback.assert_called_once()
+    transport.sftp.put.assert_not_called()
+
+
+def test_transport_capabilities_matrix():
+    assert TransportFileSystemUnix.capabilities == TransportCapabilities(
+        per_file_callback=False,
+        preserves_mtime=True,
+        size_aware_skip=True,
+        atomic_upload=False,
+        parallel_upload=False,
+        server_side_mkdir_cacheable=False,
+    )
+    assert TransportSSHUnix.capabilities == TransportFileSystemUnix.capabilities
+    assert TransportWebDAV.capabilities == TransportCapabilities(
+        per_file_callback=True,
+        preserves_mtime=False,
+        size_aware_skip=False,
+        atomic_upload=False,
+        parallel_upload=True,
+        server_side_mkdir_cacheable=True,
+    )
+    assert TransportFileSystemWindows.capabilities == TransportCapabilities(
+        per_file_callback=True,
+        preserves_mtime=True,
+        size_aware_skip=False,
+        atomic_upload=True,
+        parallel_upload=False,
+        server_side_mkdir_cacheable=False,
+    )
+    assert TransportSSHWindows.capabilities == TransportCapabilities(
+        per_file_callback=True,
+        preserves_mtime=False,
+        size_aware_skip=True,
+        atomic_upload=False,
+        parallel_upload=False,
+        server_side_mkdir_cacheable=False,
+    )
 
 
 def test_normalize_transport_config_includes_webdav_settings():

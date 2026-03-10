@@ -28,6 +28,7 @@ from .jobs import (
 from .transports import (
     GLOBAL_EXCLUDE_PATTERNS,
     TransportBase,
+    TransportCapabilities,
     TransportError,
     TransportFactory,
     TransportFileSystemUnix,
@@ -57,6 +58,7 @@ from .ui import (
 __all__ = [
     "GLOBAL_EXCLUDE_PATTERNS",
     "TransportBase",
+    "TransportCapabilities",
     "TransportError",
     "TransportFactory",
     "TransportFileSystemUnix",
