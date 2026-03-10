@@ -42,7 +42,8 @@ def test_roms_sync_setup(default_config, playlist, transport):
     roms_sync.setup(playlist)
     assert roms_sync.src == Path("tests/assets/roms")
     assert roms_sync.dst == Path("tests/assets/roms")
-    assert roms_sync.size > 1
+    assert roms_sync.size == transport.guess_file_count(roms_sync.src, [], True)
+    assert roms_sync.size > 0
 
 
 def test_roms_sync_do(default_config, playlist, transport, mocker):

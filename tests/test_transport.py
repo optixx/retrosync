@@ -128,6 +128,17 @@ def test_guess_file_count_skips_globally_excluded_paths(tmp_path, default_config
     assert transport.guess_file_count(src, whitelist=[], recursive=True) == 1
 
 
+def test_guess_file_count_counts_files_not_directories(tmp_path, default_config):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "subdir").mkdir()
+    (src / "subdir" / "nested.rom").write_text("ok", encoding="utf-8")
+    (src / "top.rom").write_text("ok", encoding="utf-8")
+
+    transport = TransportFileSystemWindows(default_config, dry_run=True)
+    assert transport.guess_file_count(src, whitelist=[], recursive=True) == 2
+
+
 def test_transport_windows_local_copy_files_skips_global_excludes(tmp_path, default_config):
     src = tmp_path / "src"
     dest = tmp_path / "dest"
@@ -145,6 +156,35 @@ def test_transport_windows_local_copy_files_skips_global_excludes(tmp_path, defa
     assert not (dest / ".DS_Store").exists()
     assert not (dest / ".zip").exists()
     assert not (dest / "__MACOSX").exists()
+
+
+def test_transport_windows_local_copy_files_respects_recursive_flag(tmp_path, default_config):
+    src = tmp_path / "src"
+    dest = tmp_path / "dest"
+    nested = src / "nested"
+    nested.mkdir(parents=True)
+    (nested / "deep.rom").write_text("ok", encoding="utf-8")
+    (src / "top.rom").write_text("ok", encoding="utf-8")
+
+    transport = TransportFileSystemWindows(default_config, dry_run=False)
+    transport.copy_files(src, dest, whitelist=[], recursive=False, callback=None)
+
+    assert (dest / "top.rom").exists()
+    assert not (dest / "nested").exists()
+
+
+def test_transport_windows_local_copy_files_respects_whitelist(tmp_path, default_config):
+    src = tmp_path / "src"
+    dest = tmp_path / "dest"
+    src.mkdir()
+    (src / "good.rom").write_text("ok", encoding="utf-8")
+    (src / "skip.txt").write_text("no", encoding="utf-8")
+
+    transport = TransportFileSystemWindows(default_config, dry_run=False)
+    transport.copy_files(src, dest, whitelist=[".rom"], recursive=False, callback=None)
+
+    assert (dest / "good.rom").exists()
+    assert not (dest / "skip.txt").exists()
 
 
 def test_normalize_transport_config_includes_webdav_settings():
@@ -246,6 +286,40 @@ def test_transport_webdav_request_401_retries_with_preemptive_basic_auth():
 
     assert len(calls) == 2
     assert "Authorization" not in calls[0]["headers"]
+    assert calls[1]["headers"]["Authorization"] == transport._auth_header
+
+
+def test_transport_webdav_request_rewinds_stream_body_before_retry():
+    default = {
+        "transport": "webdav",
+        "host": "http://dav.local",
+        "username": "user",
+        "password": "pass",
+    }
+    transport = TransportWebDAV(default, dry_run=False)
+    calls = []
+
+    class RewindableBody:
+        def __init__(self):
+            self.seek_calls = 0
+
+        def seek(self, _offset):
+            self.seek_calls += 1
+
+    body = RewindableBody()
+
+    def fake_request_once(method, path, headers=None, **_kwargs):
+        calls.append({"method": method, "path": path, "headers": dict(headers or {})})
+        if len(calls) == 1:
+            raise urllib.error.HTTPError(
+                url=f"{transport.base_url}{path}", code=401, msg="Unauthorized", hdrs=None, fp=None
+            )
+        return None
+
+    with patch.object(transport, "_request_once", side_effect=fake_request_once):
+        transport._request("PUT", "/Sync/file.bin", body=body)
+
+    assert body.seek_calls >= 2
     assert calls[1]["headers"]["Authorization"] == transport._auth_header
 
 
@@ -379,6 +453,41 @@ def test_transport_webdav_mkcol_reraises_failure_when_path_missing():
     ):
         with pytest.raises(RuntimeError, match="failed mkcol"):
             transport._mkcol("/Sync/RetroArch")
+
+
+def test_transport_webdav_path_exists_returns_false_only_for_404():
+    default = {
+        "transport": "webdav",
+        "host": "http://dav.local",
+        "username": "user",
+        "password": "pass",
+    }
+    transport = TransportWebDAV(default, dry_run=False)
+
+    with patch.object(
+        transport,
+        "_request",
+        side_effect=RuntimeError("WebDAV PROPFIND /x failed with HTTP 404"),
+    ):
+        assert transport._path_exists("/x") is False
+
+
+def test_transport_webdav_path_exists_reraises_non_404_errors():
+    default = {
+        "transport": "webdav",
+        "host": "http://dav.local",
+        "username": "user",
+        "password": "pass",
+    }
+    transport = TransportWebDAV(default, dry_run=False)
+
+    with patch.object(
+        transport,
+        "_request",
+        side_effect=RuntimeError("WebDAV PROPFIND /x failed with HTTP 401"),
+    ):
+        with pytest.raises(RuntimeError, match="HTTP 401"):
+            transport._path_exists("/x")
 
 
 def test_transport_webdav_parallel_copy_calls_callback_for_each_file(tmp_path):

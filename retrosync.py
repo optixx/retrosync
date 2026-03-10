@@ -207,6 +207,8 @@ class TransportBase:
         else:
             generator = src_path.glob("*")
         for filename in generator:
+            if not filename.is_file():
+                continue
             if self.is_excluded_path(filename.relative_to(src_path)):
                 continue
             if whitelist:
@@ -416,9 +418,6 @@ class TransportWebDAV(TransportBase):
             self._thread_local.opener = opener
         return opener
 
-    def _status(self, message):
-        set_transport_status(f"WebDAV: {message}")
-
     def _remote_path(self, path_value: Path):
         path = path_value.as_posix()
         home = Path.home().as_posix()
@@ -451,7 +450,16 @@ class TransportWebDAV(TransportBase):
             )
 
     def _request(self, method, path, body=None, headers=None, ok_codes=(200, 201, 204, 207)):
+        def rewind_body():
+            if body is None or not hasattr(body, "seek"):
+                return
+            try:
+                body.seek(0)
+            except (OSError, ValueError):
+                pass
+
         try:
+            rewind_body()
             self._request_once(method, path, body=body, headers=headers, ok_codes=ok_codes)
             return
         except urllib.error.HTTPError as exc:
@@ -468,6 +476,7 @@ class TransportWebDAV(TransportBase):
                     path,
                 )
                 try:
+                    rewind_body()
                     self._request_once(
                         method, path, body=body, headers=retry_headers, ok_codes=ok_codes
                     )
@@ -508,10 +517,12 @@ class TransportWebDAV(TransportBase):
     def _path_exists(self, path):
         headers = {"Depth": "0"}
         try:
-            self._request("PROPFIND", path, headers=headers, ok_codes=(200, 207))
+            self._request("PROPFIND", path, headers=headers, ok_codes=(200, 207, 301))
             return True
-        except Exception:
-            return False
+        except RuntimeError as exc:
+            if "HTTP 404" in str(exc):
+                return False
+            raise
 
     def ensure_dir_exists(self, path_directory: Path):
         if self.dry_run:
@@ -545,8 +556,6 @@ class TransportWebDAV(TransportBase):
         if ensure_parent:
             self.ensure_dir_exists(dest_filename.parent)
         file_size = src_filename.stat().st_size
-        with open(src_filename, "rb") as fd:
-            data = fd.read()
         remote = self._remote_path(dest_filename)
         logger.debug(
             "TransportWebDAV::copy_file: upload start src=%s dest=%s bytes=%s",
@@ -555,9 +564,10 @@ class TransportWebDAV(TransportBase):
             file_size,
         )
         started = time.monotonic()
-        self._request(
-            "PUT", remote, body=data, headers={"Content-Type": "application/octet-stream"}
-        )
+        with open(src_filename, "rb") as fd:
+            self._request(
+                "PUT", remote, body=fd, headers={"Content-Type": "application/octet-stream"}
+            )
         elapsed = time.monotonic() - started
         logger.debug(
             "TransportWebDAV::copy_file: upload done src=%s dest=%s bytes=%s elapsed=%.2fs",
@@ -692,9 +702,9 @@ class TransportFileSystemWindows(TransportWindowsBase):
         self.ensure_dir_exists(dest_path)
         cnt = 1
         for item in src_path.iterdir():
-            logger.debug(f"TransportLocaleWindows::copy_files: [{cnt}/{guessed_len}] {item.name}")
-            if callback:
-                callback()
+            logger.debug(
+                f"TransportFileSystemWindows::copy_files: [{cnt}/{guessed_len}] {item.name}"
+            )
             cnt += 1
             s = item
             if self.is_excluded_path(s.relative_to(src_path)):
@@ -702,8 +712,15 @@ class TransportFileSystemWindows(TransportWindowsBase):
                 continue
             d = dest_path / item.name
             if s.is_dir():
-                self.copy_files(s, d, whitelist, recursive, callback)
+                if recursive:
+                    self.copy_files(s, d, whitelist, recursive, callback)
+                continue
             else:
+                if whitelist and s.suffix not in whitelist:
+                    logger.debug(f"TransportFileSystemWindows::copy_files: not whitelist match {s}")
+                    continue
+                if callback:
+                    callback()
                 if not self.dry_run:
                     shutil.copy2(s, d)
 
@@ -1031,16 +1048,18 @@ class PlaylistSyncJob(SystemJob):
         temp_file.flush()
         temp_file.seek(0)
 
-    def do(self, _callback):
+    def do(self, callback=None):
         name = self.playlist.get("name")
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate_playlist(temp_file)
             self.transport.copy_file(
                 Path(temp_file.name), Path(self.default.get("dest_playlists")) / name
             )
+        if callback:
+            callback()
 
 
-class PlaylistUpdatecJob(SystemJob):
+class PlaylistUpdateJob(SystemJob):
     name = "Update Playlist"
 
     def setup(self, playlist):
@@ -1106,7 +1125,7 @@ class PlaylistUpdatecJob(SystemJob):
                 name_map[game.attrib["name"]] = title
         return name_map
 
-    def do(self, _callback):
+    def do(self, callback=None):
         name = self.playlist.get("name")
         logger.debug(f"migrate_playlist: name={name}")
         local = Path(self.default.get("src_playlists")) / name
@@ -1174,6 +1193,13 @@ class PlaylistUpdatecJob(SystemJob):
         if not self.transport.dry_run:
             with open(str(local), "w") as new_file:
                 new_file.write(doc)
+        if callback:
+            callback()
+
+
+# Backward-compatible alias for older imports/tests.
+class PlaylistUpdatecJob(PlaylistUpdateJob):
+    pass
 
 
 def rank_system_matches(system_name, playlists, limit=8):
@@ -1551,7 +1577,7 @@ def main(
 
     system_jobs = []
     if do_update_playlists:
-        system_jobs.append(PlaylistUpdatecJob(default, transport))
+        system_jobs.append(PlaylistUpdateJob(default, transport))
 
     if do_sync_playlists:
         system_jobs.append(PlaylistSyncJob(default, transport))
@@ -1654,7 +1680,6 @@ def main(
                     step_progress.update(step_task_id, advance=1)
                     step_progress.stop_task(step_task_id)
                     step_progress.update(step_task_id, visible=False)
-                    system_steps_progress.update(system_steps_task_id, advance=1)
 
                 if dry_run:
                     time.sleep(0.2)
