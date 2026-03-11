@@ -31,6 +31,7 @@ class GlobalJob(JobBase):
         self.playlists = playlists
         self.transport = transport
         self.size = 1
+        self.transfer_bytes = 0
         self.setup()
 
     def setup(self):
@@ -44,6 +45,7 @@ class BiosSync(GlobalJob):
         self.src = Path(self.default.get("src_bios"))
         self.dst = Path(self.default.get("dest_bios"))
         self.size = self.transport.guess_file_count(self.src, [], True)
+        self.transfer_bytes = self.transport.guess_total_size(self.src, [], True)
 
     def do(self, callback=None):
         self.transport.copy_files(
@@ -62,6 +64,7 @@ class ThumbnailsSync(BiosSync):
         self.src = Path(self.default.get("src_thumbnails"))
         self.dst = Path(self.default.get("dest_thumbnails"))
         self.size = self.transport.guess_file_count(self.src, [], True)
+        self.transfer_bytes = self.transport.guess_total_size(self.src, [], True)
 
 
 class FavoritesSync(BiosSync):
@@ -71,6 +74,7 @@ class FavoritesSync(BiosSync):
         self.src = Path(self.default.get("src_config")) / "content_favorites.lpl"
         self.dst = Path(self.default.get("dest_config")) / "content_favorites.lpl"
         self.size = 1
+        self.transfer_bytes = self.src.stat().st_size if self.src.exists() else 0
 
     def do(self, callback=None):
         with tempfile.NamedTemporaryFile() as temp_file:
@@ -132,6 +136,7 @@ class SystemJob(JobBase):
         self.default = default
         self.transport = transport
         self.size = 1
+        self.transfer_bytes = 0
 
     def get_src_rom_roots(self):
         src_roms = self.default.get("src_roms")
@@ -156,6 +161,7 @@ class RomSyncJob(SystemJob):
         self.src = self.get_primary_src_rom_root() / self.playlist.get("src_folder")
         self.dst = Path(self.default.get("dest_roms")) / self.playlist.get("dest_folder")
         self.size = self.transport.guess_file_count(self.src, [], True)
+        self.transfer_bytes = self.transport.guess_total_size(self.src, [], True)
 
     def do(self, callback):
         self.transport.copy_files(
@@ -169,6 +175,8 @@ class PlaylistSyncJob(SystemJob):
     def setup(self, playlist):
         self.playlist = playlist
         self.size = 1
+        local = Path(self.default.get("src_playlists")) / self.playlist.get("name")
+        self.transfer_bytes = local.stat().st_size if local.exists() else 0
 
     def migrate_playlist(self, temp_file):
         name = self.playlist.get("name")

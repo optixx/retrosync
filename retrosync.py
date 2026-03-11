@@ -120,6 +120,14 @@ __all__ = [
 ]
 
 
+def format_transfer_size(num_bytes):
+    gib = 1024**3
+    mib = 1024**2
+    if num_bytes >= gib:
+        return f"{num_bytes / gib:.2f} GB"
+    return f"{num_bytes / mib:.2f} MB"
+
+
 @click.command()
 @click.option(
     "--all",
@@ -338,7 +346,19 @@ def main(
     for _, playlist in enumerate(playlists):
         name = Path(playlist.get("name")).stem
         if not playlist.get("disabled", False):
-            systems[name] = {"name": name, "playlist": playlist}
+            system_transfer_bytes = 0
+            for job in system_jobs:
+                job.setup(playlist)
+                system_transfer_bytes += getattr(job, "transfer_bytes", 0)
+            systems[name] = {
+                "name": name,
+                "playlist": playlist,
+                "transfer_bytes": system_transfer_bytes,
+            }
+
+    total_transfer_bytes = sum(getattr(job, "transfer_bytes", 0) for job in jobs) + sum(
+        system["transfer_bytes"] for system in systems.values()
+    )
 
     overall_total = len(jobs) + (len(systems) if system_jobs else 0)
     overall_task_id = overall_progress.add_task("", total=overall_total)
@@ -353,7 +373,10 @@ def main(
             ) in enumerate(jobs):
                 top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
                 overall_progress.update(overall_task_id, description=top_descr)
-                current_task_id = current_system_progress.add_task(f"Run job {job.name}")
+                job_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
+                current_task_id = current_system_progress.add_task(
+                    f"Run job {job.name} ({job_size})"
+                )
                 system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
                 system_steps_progress.update(system_steps_task_id, advance=1)
                 begin_transport_file_progress(job.size if supports_per_file_progress else 1)
@@ -382,13 +405,16 @@ def main(
                 system_steps_progress.update(system_steps_task_id, visible=False)
                 current_system_progress.stop_task(current_task_id)
                 current_system_progress.update(
-                    current_task_id, description=f"[bold green]{job.name} synced!"
+                    current_task_id, description=f"[bold green]{job.name} synced ({job_size})"
                 )
                 overall_progress.update(overall_task_id, advance=1)
 
             overall_progress.update(
                 overall_task_id,
-                description=f"[bold green]{len(jobs)} jobs processed, done!",
+                description=(
+                    f"[bold green]{len(jobs)} jobs processed "
+                    f"({format_transfer_size(total_transfer_bytes)}), done!"
+                ),
             )
 
             if do_update_playlists or do_sync_playlists or do_sync_roms:
@@ -401,12 +427,15 @@ def main(
                     logger.info("main: Process %s", playlist.get("name"))
                     top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
                     overall_progress.update(overall_task_id, description=top_descr)
-                    current_task_id = current_system_progress.add_task(f"Syncing system {name}")
+                    system_transfer_size = format_transfer_size(systems[key]["transfer_bytes"])
+                    current_task_id = current_system_progress.add_task(
+                        f"Syncing system {name} ({system_transfer_size})"
+                    )
 
                     system_jobs_size = 0
                     for job in system_jobs:
                         job.setup(playlist)
-                    system_jobs_size += job.size
+                        system_jobs_size += job.size
 
                     if supports_per_file_progress:
                         system_steps_total = system_jobs_size
@@ -416,7 +445,10 @@ def main(
                         "", total=system_steps_total, name=name
                     )
                     for job in system_jobs:
-                        step_task_id = step_progress.add_task("", action=job.name, name=name)
+                        step_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
+                        step_task_id = step_progress.add_task(
+                            "", action=f"{job.name} ({step_size})", name=name
+                        )
                         if do_debug:
                             time.sleep(1)
 
@@ -459,17 +491,26 @@ def main(
                     system_steps_progress.update(system_steps_task_id, visible=False)
                     current_system_progress.stop_task(current_task_id)
                     current_system_progress.update(
-                        current_task_id, description=f"[bold green]{name} synced!"
+                        current_task_id,
+                        description=f"[bold green]{name} synced ({system_transfer_size})",
                     )
                     overall_progress.update(overall_task_id, advance=1)
 
                 overall_progress.update(
                     overall_task_id,
-                    description=f"[bold green]{len(systems)} systems processed, done!",
+                    description=(
+                        f"[bold green]{len(systems)} systems processed "
+                        f"({format_transfer_size(total_transfer_bytes)}), done!"
+                    ),
                 )
             hide_transport_tasks()
         except KeyboardInterrupt:
             abort_with_cleanup("Stopping workers...")
+
+    if dry_run:
+        print(f"Dry-run estimate: {format_transfer_size(total_transfer_bytes)} would be copied.")
+    else:
+        print(f"Estimated transfer volume: {format_transfer_size(total_transfer_bytes)}.")
 
 
 if __name__ == "__main__":

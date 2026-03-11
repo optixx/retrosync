@@ -117,6 +117,26 @@ class TransportBase:
 
         return cnt
 
+    def guess_total_size(self, src_path: Path, whitelist: list, recursive=False):
+        total = 0
+        if recursive:
+            generator = src_path.rglob("*")
+        else:
+            generator = src_path.glob("*")
+        for filename in generator:
+            if not filename.is_file():
+                continue
+            if self.is_excluded_path(filename.relative_to(src_path)):
+                continue
+            if whitelist and filename.suffix not in whitelist:
+                continue
+            try:
+                total += filename.stat().st_size
+            except OSError:
+                continue
+
+        return total
+
 
 class TransportUnixBase(TransportBase):
     capabilities = TransportCapabilities(
