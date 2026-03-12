@@ -259,9 +259,139 @@ class PlaylistUpdateJob(SystemJob):
         stem = str(Path(file).stem)
         new_item = copy.copy(item_tpl)
         new_item["path"] = file
-        new_item["label"] = self.name_map.get(stem, stem)
+        default_label = self.name_map.get(stem, stem)
+        new_item["label"] = self.resolve_thumbnail_label(stem, default_label)
         new_item["db_name"] = local.name
         return new_item
+
+    def _normalize_thumbnail_key(self, name):
+        normalized = name.lower().strip()
+        normalized = re.sub(r"\.[^.]+$", "", normalized)
+        # Remove common release metadata tokens that often differ from thumbnail naming.
+        normalized = re.sub(
+            r"\((usa|us|europe|eu|japan|jp|world|pal|ntsc|prototype|proto|beta)[^)]*\)",
+            "",
+            normalized,
+        )
+        normalized = re.sub(
+            r"\((rev[^)]*|v\d+(\.\d+)?|disc \d+|disk \d+|demo|sample)[^)]*\)", "", normalized
+        )
+        normalized = re.sub(r"\[[^\]]*\]", "", normalized)
+        normalized = re.sub(r"[_\-.]+", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
+    def _relaxed_thumbnail_key(self, name):
+        normalized = name.lower().strip()
+        normalized = re.sub(r"\.[^.]+$", "", normalized)
+        normalized = re.sub(r"\([^)]*\)", "", normalized)
+        normalized = re.sub(r"\[[^\]]*\]", "", normalized)
+        normalized = re.sub(r"[_\-.]+", " ", normalized)
+        normalized = re.sub(r"\s+", " ", normalized).strip()
+        return normalized
+
+    def build_thumbnail_index(self):
+        index = {"exact": {}, "normalized": {}, "relaxed": {}}
+        src_thumbnails = self.default.get("src_thumbnails")
+        if not src_thumbnails:
+            return index
+
+        system_name = Path(self.playlist.get("name")).stem
+        system_dir = Path(src_thumbnails) / system_name
+        if not system_dir.is_dir():
+            return index
+
+        thumb_folders = [
+            "Named_Boxarts",
+            "Named_Snaps",
+            "Named_Titles",
+        ]
+        for folder in thumb_folders:
+            path = system_dir / folder
+            if not path.is_dir():
+                continue
+            for thumb in path.iterdir():
+                if not thumb.is_file():
+                    continue
+                base = thumb.stem
+                exact_key = base.casefold()
+                if exact_key not in index["exact"]:
+                    index["exact"][exact_key] = base
+                normalized = self._normalize_thumbnail_key(base)
+                if not normalized:
+                    continue
+                index["normalized"].setdefault(normalized, set()).add(base)
+                relaxed = self._relaxed_thumbnail_key(base)
+                if relaxed:
+                    index["relaxed"].setdefault(relaxed, set()).add(base)
+        return index
+
+    def resolve_thumbnail_label(self, stem, default_label):
+        mode = self.playlist.get(
+            "thumbnail_label_mode",
+            self.default.get("thumbnail_label_mode", "prefer-thumbnail"),
+        )
+        if mode != "prefer-thumbnail":
+            return default_label
+
+        candidates = [default_label, stem]
+        for candidate in candidates:
+            exact = self.thumbnail_index["exact"].get(candidate.casefold())
+            if exact:
+                self.thumbnail_match_count += 1
+                if exact != default_label:
+                    logger.debug(
+                        "update_playlist: thumbnail label adapted system=%s stem=%s from=%s to=%s match=exact candidate=%s",
+                        Path(self.playlist.get("name")).stem,
+                        stem,
+                        default_label,
+                        exact,
+                        candidate,
+                    )
+                return exact
+
+        for candidate in candidates:
+            normalized = self._normalize_thumbnail_key(candidate)
+            if not normalized:
+                continue
+            normalized_matches = self.thumbnail_index["normalized"].get(normalized, set())
+            if len(normalized_matches) == 1:
+                self.thumbnail_match_count += 1
+                matched = next(iter(normalized_matches))
+                if matched != default_label:
+                    logger.debug(
+                        "update_playlist: thumbnail label adapted system=%s stem=%s from=%s to=%s match=normalized key=%s candidate=%s",
+                        Path(self.playlist.get("name")).stem,
+                        stem,
+                        default_label,
+                        matched,
+                        normalized,
+                        candidate,
+                    )
+                return matched
+
+        for candidate in candidates:
+            relaxed = self._relaxed_thumbnail_key(candidate)
+            if not relaxed:
+                continue
+            relaxed_matches = self.thumbnail_index["relaxed"].get(relaxed, set())
+            if len(relaxed_matches) == 1:
+                self.thumbnail_match_count += 1
+                matched = next(iter(relaxed_matches))
+                if matched != default_label:
+                    logger.debug(
+                        "update_playlist: thumbnail label adapted system=%s stem=%s from=%s to=%s match=relaxed key=%s candidate=%s",
+                        Path(self.playlist.get("name")).stem,
+                        stem,
+                        default_label,
+                        matched,
+                        relaxed,
+                        candidate,
+                    )
+                return matched
+
+        self.thumbnail_miss_count += 1
+        return default_label
 
     def create_m3u(self, src_rom_dir):
         logger.debug("create_m3u: Create m3u files")
@@ -334,6 +464,9 @@ class PlaylistUpdateJob(SystemJob):
         whitelist = self.playlist.get("src_whitelist", False)
         blacklist = self.playlist.get("src_blacklist", False)
         self.name_map = self.build_file_map(src_rom_dir, self.playlist.get("src_dat_file", ""))
+        self.thumbnail_index = self.build_thumbnail_index()
+        self.thumbnail_match_count = 0
+        self.thumbnail_miss_count = 0
         items = []
         files = glob.glob(str(src_rom_dir / "*"))
         files.sort()
@@ -374,6 +507,11 @@ class PlaylistUpdateJob(SystemJob):
                 items.append(self.make_item(local, file))
 
         data["items"] = items
+        logger.debug(
+            "update_playlist: thumbnail label matching matched=%s missed=%s",
+            self.thumbnail_match_count,
+            self.thumbnail_miss_count,
+        )
         doc = json.dumps(data, indent=2)
         logger.debug(json.dumps(data, indent=2))
         if not self.transport.dry_run:

@@ -147,3 +147,164 @@ def test_playlist_update_do_calls_callback_once(tmp_path):
     job.do(callback=callback)
 
     callback.assert_called_once()
+
+
+def test_playlist_update_prefers_thumbnail_label_match(tmp_path):
+    src_playlists = tmp_path / "playlists"
+    src_playlists.mkdir()
+    src_roms = tmp_path / "roms"
+    src_roms.mkdir()
+    (src_roms / "Super Mario Bros (USA).zip").write_text("rom", encoding="utf-8")
+
+    src_thumbnails = tmp_path / "thumbnails"
+    (src_thumbnails / "Nintendo - Test" / "Named_Boxarts").mkdir(parents=True)
+    (src_thumbnails / "Nintendo - Test" / "Named_Boxarts" / "Super Mario Bros.png").write_text(
+        "img", encoding="utf-8"
+    )
+
+    playlist_name = "Nintendo - Test.lpl"
+    playlist_file = src_playlists / playlist_name
+    playlist_file.write_text(
+        json.dumps(
+            {
+                "default_core_path": "",
+                "default_core_name": "",
+                "scan_content_dir": "",
+                "scan_dat_file_path": "",
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    transport = Mock()
+    transport.dry_run = False
+    default_config = {
+        "src_playlists": str(src_playlists),
+        "src_roms": [str(src_roms)],
+        "src_thumbnails": str(src_thumbnails),
+        "src_cores": "/cores",
+        "src_cores_suffix": ".so",
+    }
+    playlist = {
+        "name": playlist_name,
+        "src_folder": "",
+        "src_core_path": "test_core",
+        "src_core_name": "Test Core",
+    }
+
+    job = PlaylistUpdatecJob(default_config, transport=transport)
+    job.setup(playlist)
+    job.do()
+
+    updated = json.loads(playlist_file.read_text(encoding="utf-8"))
+    assert updated["items"][0]["path"].endswith("Super Mario Bros (USA).zip")
+    assert updated["items"][0]["label"] == "Super Mario Bros"
+
+
+def test_playlist_update_can_keep_default_label(tmp_path):
+    src_playlists = tmp_path / "playlists"
+    src_playlists.mkdir()
+    src_roms = tmp_path / "roms"
+    src_roms.mkdir()
+    (src_roms / "Contra (USA).zip").write_text("rom", encoding="utf-8")
+
+    src_thumbnails = tmp_path / "thumbnails"
+    (src_thumbnails / "Nintendo - Test" / "Named_Boxarts").mkdir(parents=True)
+    (src_thumbnails / "Nintendo - Test" / "Named_Boxarts" / "Contra.png").write_text(
+        "img", encoding="utf-8"
+    )
+
+    playlist_name = "Nintendo - Test.lpl"
+    playlist_file = src_playlists / playlist_name
+    playlist_file.write_text(
+        json.dumps(
+            {
+                "default_core_path": "",
+                "default_core_name": "",
+                "scan_content_dir": "",
+                "scan_dat_file_path": "",
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    transport = Mock()
+    transport.dry_run = False
+    default_config = {
+        "src_playlists": str(src_playlists),
+        "src_roms": [str(src_roms)],
+        "src_thumbnails": str(src_thumbnails),
+        "thumbnail_label_mode": "keep-label",
+        "src_cores": "/cores",
+        "src_cores_suffix": ".so",
+    }
+    playlist = {
+        "name": playlist_name,
+        "src_folder": "",
+        "src_core_path": "test_core",
+        "src_core_name": "Test Core",
+    }
+
+    job = PlaylistUpdatecJob(default_config, transport=transport)
+    job.setup(playlist)
+    job.do()
+
+    updated = json.loads(playlist_file.read_text(encoding="utf-8"))
+    assert updated["items"][0]["label"] == "Contra (USA)"
+
+
+def test_playlist_update_relaxed_thumbnail_match_for_variant_date_and_proto(tmp_path):
+    src_playlists = tmp_path / "playlists"
+    src_playlists.mkdir()
+    src_roms = tmp_path / "roms"
+    src_roms.mkdir()
+    (src_roms / "Alien Vs Predator (Prototype) (1993) [!].lnx").write_text("rom", encoding="utf-8")
+
+    src_thumbnails = tmp_path / "thumbnails"
+    (src_thumbnails / "Atari - Lynx" / "Named_Boxarts").mkdir(parents=True)
+    (
+        src_thumbnails
+        / "Atari - Lynx"
+        / "Named_Boxarts"
+        / "Alien vs Predator (USA) (Proto) (1993-12-17).png"
+    ).write_text("img", encoding="utf-8")
+
+    playlist_name = "Atari - Lynx.lpl"
+    playlist_file = src_playlists / playlist_name
+    playlist_file.write_text(
+        json.dumps(
+            {
+                "default_core_path": "",
+                "default_core_name": "",
+                "scan_content_dir": "",
+                "scan_dat_file_path": "",
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    transport = Mock()
+    transport.dry_run = False
+    default_config = {
+        "src_playlists": str(src_playlists),
+        "src_roms": [str(src_roms)],
+        "src_thumbnails": str(src_thumbnails),
+        "src_cores": "/cores",
+        "src_cores_suffix": ".so",
+    }
+    playlist = {
+        "name": playlist_name,
+        "src_folder": "",
+        "src_core_path": "test_core",
+        "src_core_name": "Test Core",
+    }
+
+    job = PlaylistUpdatecJob(default_config, transport=transport)
+    job.setup(playlist)
+    job.do()
+
+    updated = json.loads(playlist_file.read_text(encoding="utf-8"))
+    assert updated["items"][0]["label"] == "Alien vs Predator (USA) (Proto) (1993-12-17)"
