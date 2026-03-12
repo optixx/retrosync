@@ -6,11 +6,9 @@ __version__ = "0.1.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
+import concurrent
 import logging
 import sys
-import time
-import concurrent
-from pathlib import Path
 
 import click
 import toml
@@ -37,6 +35,13 @@ from retrosync_core.jobs import (
     SystemJob,
     ThumbnailsSync,
 )
+from retrosync_core.paths import (
+    expand_user_path,
+    expand_user_path_list,
+    normalize_webdav_remote_path,
+    retroarch_derived_paths,
+)
+from retrosync_core.runner import JobRegistry, SyncAbortError, SyncRunConfig, SyncRunner
 from retrosync_core.transports import (
     GLOBAL_EXCLUDE_PATTERNS,
     TransportBase,
@@ -65,12 +70,6 @@ from retrosync_core.ui import (
     set_transport_status,
     step_progress,
     system_steps_progress,
-)
-from retrosync_core.paths import (
-    expand_user_path,
-    expand_user_path_list,
-    normalize_webdav_remote_path,
-    retroarch_derived_paths,
 )
 
 logger = logging.getLogger()
@@ -120,12 +119,79 @@ __all__ = [
 ]
 
 
-def format_transfer_size(num_bytes):
-    gib = 1024**3
-    mib = 1024**2
-    if num_bytes >= gib:
-        return f"{num_bytes / gib:.2f} GB"
-    return f"{num_bytes / mib:.2f} MB"
+class CliRichReporter:
+    def __init__(self):
+        self.live = None
+        self.overall_task_id = None
+
+    def start(self, *, overall_total, supports_per_file_progress):
+        self.overall_task_id = overall_progress.add_task("", total=overall_total)
+        self.live = Live(progress_group)
+        self.live.__enter__()
+        init_live_tasks()
+        if not supports_per_file_progress:
+            set_transport_status("Per-file progress unavailable; using per-job progress.")
+
+    def finish(self):
+        if self.live is not None:
+            self.live.__exit__(None, None, None)
+            self.live = None
+
+    def update_overall(self, *, description=None, advance=0):
+        if self.overall_task_id is None:
+            return
+        kwargs = {}
+        if description is not None:
+            kwargs["description"] = description
+        if advance:
+            kwargs["advance"] = advance
+        if kwargs:
+            overall_progress.update(self.overall_task_id, **kwargs)
+
+    def add_current_task(self, description):
+        return current_system_progress.add_task(description)
+
+    def stop_current_task(self, task_id, *, description):
+        current_system_progress.stop_task(task_id)
+        current_system_progress.update(task_id, description=description)
+
+    def add_system_steps(self, *, name, total):
+        return system_steps_progress.add_task("", total=total, name=name)
+
+    def advance_system_steps(self, task_id, *, advance=1):
+        system_steps_progress.update(task_id, advance=advance)
+
+    def hide_system_steps(self, task_id):
+        system_steps_progress.update(task_id, visible=False)
+
+    def add_step_task(self, *, action, name):
+        return step_progress.add_task("", action=action, name=name)
+
+    def finish_step_task(self, task_id):
+        step_progress.update(task_id, advance=1)
+        step_progress.stop_task(task_id)
+        step_progress.update(task_id, visible=False)
+
+    def begin_transport_file_progress(self, total):
+        begin_transport_file_progress(total)
+
+    def advance_transport_file_progress(self, *, step=1):
+        advance_transport_file_progress(step)
+
+    def complete_transport_file_progress(self):
+        complete_transport_file_progress()
+
+    def end_transport_file_progress(self):
+        end_transport_file_progress()
+
+    def set_transport_status(self, message):
+        set_transport_status(message)
+
+    def hide_transport_tasks(self):
+        hide_transport_tasks()
+
+    def emit_summary(self, message):
+        print(message)
 
 
 @click.command()
@@ -232,12 +298,6 @@ def main(
 ):
     global logger
 
-    def abort_with_cleanup(message):
-        set_transport_status("")
-        hide_transport_tasks()
-        print(message)
-        sys.exit(-1)
-
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
@@ -315,202 +375,37 @@ def main(
                 sys.exit(-1)
             system_name = matches[selected - 1]
 
-    jobs = []
     transport = TransportFactory(default, dry_run, force_transport)
-    supports_per_file_progress = getattr(
-        getattr(transport, "capabilities", None), "per_file_callback", True
+    runner = SyncRunner(
+        default=default,
+        playlists=playlists,
+        transport=transport,
+        reporter=CliRichReporter(),
+        job_registry=JobRegistry(
+            bios_sync=BiosSync,
+            favorites_sync=FavoritesSync,
+            thumbnails_sync=ThumbnailsSync,
+            playlist_sync_job=PlaylistSyncJob,
+            playlist_update_job=PlaylistUpdateJob,
+            rom_sync_job=RomSyncJob,
+        ),
     )
-    if do_sync_bios:
-        jobs.append(BiosSync(default, playlists, transport))
-
-    if do_sync_favorites:
-        jobs.append(FavoritesSync(default, playlists, transport))
-
-    if do_sync_thumbails:
-        jobs.append(ThumbnailsSync(default, playlists, transport))
-
-    system_jobs = []
-    if do_update_playlists:
-        system_jobs.append(PlaylistUpdateJob(default, transport))
-
-    if do_sync_playlists:
-        system_jobs.append(PlaylistSyncJob(default, transport))
-
-    if do_sync_roms:
-        system_jobs.append(RomSyncJob(default, transport))
-
-    if system_name:
-        playlists = [p for p in playlists if p.get("name") == system_name]
-
-    systems = {}
-    for _, playlist in enumerate(playlists):
-        name = Path(playlist.get("name")).stem
-        if not playlist.get("disabled", False):
-            system_transfer_bytes = 0
-            for job in system_jobs:
-                job.setup(playlist)
-                system_transfer_bytes += getattr(job, "transfer_bytes", 0)
-            systems[name] = {
-                "name": name,
-                "playlist": playlist,
-                "transfer_bytes": system_transfer_bytes,
-            }
-
-    total_transfer_bytes = sum(getattr(job, "transfer_bytes", 0) for job in jobs) + sum(
-        system["transfer_bytes"] for system in systems.values()
+    run_cfg = SyncRunConfig(
+        do_sync_playlists=do_sync_playlists,
+        do_sync_bios=do_sync_bios,
+        do_sync_favorites=do_sync_favorites,
+        do_sync_thumbnails=do_sync_thumbails,
+        do_sync_roms=do_sync_roms,
+        do_update_playlists=do_update_playlists,
+        dry_run=dry_run,
+        do_debug=do_debug,
     )
 
-    overall_total = len(jobs) + (len(systems) if system_jobs else 0)
-    overall_task_id = overall_progress.add_task("", total=overall_total)
-    with Live(progress_group):
-        init_live_tasks()
-        if not supports_per_file_progress:
-            set_transport_status("Per-file progress unavailable; using per-job progress.")
-        try:
-            for (
-                idx,
-                job,
-            ) in enumerate(jobs):
-                top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
-                overall_progress.update(overall_task_id, description=top_descr)
-                job_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
-                current_task_id = current_system_progress.add_task(
-                    f"Run job {job.name} ({job_size})"
-                )
-                system_steps_task_id = system_steps_progress.add_task("", total=2, name=job.name)
-                system_steps_progress.update(system_steps_task_id, advance=1)
-                begin_transport_file_progress(job.size if supports_per_file_progress else 1)
-                try:
-                    callback = (
-                        (lambda: advance_transport_file_progress(1))
-                        if supports_per_file_progress
-                        else None
-                    )
-                    job.do(callback=callback)
-                    if not supports_per_file_progress:
-                        advance_transport_file_progress(1)
-                    complete_transport_file_progress()
-                except TransportError as exc:
-                    interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
-                        "interrupted by user" in str(exc).lower()
-                    )
-                    if interrupted:
-                        abort_with_cleanup("Stopping workers...")
-                    abort_with_cleanup(f"Transfer aborted: {exc}")
-                finally:
-                    end_transport_file_progress()
-                if dry_run:
-                    time.sleep(0.2)
-                system_steps_progress.update(system_steps_task_id, advance=1)
-                system_steps_progress.update(system_steps_task_id, visible=False)
-                current_system_progress.stop_task(current_task_id)
-                current_system_progress.update(
-                    current_task_id, description=f"[bold green]{job.name} synced ({job_size})"
-                )
-                overall_progress.update(overall_task_id, advance=1)
-
-            overall_progress.update(
-                overall_task_id,
-                description=(
-                    f"[bold green]{len(jobs)} jobs processed "
-                    f"({format_transfer_size(total_transfer_bytes)}), done!"
-                ),
-            )
-
-            if do_update_playlists or do_sync_playlists or do_sync_roms:
-                for (
-                    idx,
-                    key,
-                ) in enumerate(systems.keys()):
-                    name = systems[key]["name"]
-                    playlist = systems[key]["playlist"]
-                    logger.info("main: Process %s", playlist.get("name"))
-                    top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
-                    overall_progress.update(overall_task_id, description=top_descr)
-                    system_transfer_size = format_transfer_size(systems[key]["transfer_bytes"])
-                    current_task_id = current_system_progress.add_task(
-                        f"Syncing system {name} ({system_transfer_size})"
-                    )
-
-                    system_jobs_size = 0
-                    for job in system_jobs:
-                        job.setup(playlist)
-                        system_jobs_size += job.size
-
-                    if supports_per_file_progress:
-                        system_steps_total = system_jobs_size
-                    else:
-                        system_steps_total = len(system_jobs)
-                    system_steps_task_id = system_steps_progress.add_task(
-                        "", total=system_steps_total, name=name
-                    )
-                    for job in system_jobs:
-                        step_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
-                        step_task_id = step_progress.add_task(
-                            "", action=f"{job.name} ({step_size})", name=name
-                        )
-                        if do_debug:
-                            time.sleep(1)
-
-                        job.setup(playlist)
-                        begin_transport_file_progress(job.size if supports_per_file_progress else 1)
-                        try:
-                            callback = (
-                                (
-                                    lambda system_steps_task_id=system_steps_task_id: (
-                                        system_steps_progress.update(
-                                            system_steps_task_id, advance=1
-                                        ),
-                                        advance_transport_file_progress(1),
-                                    )
-                                )
-                                if supports_per_file_progress
-                                else None
-                            )
-                            job.do(callback)
-                            if not supports_per_file_progress:
-                                system_steps_progress.update(system_steps_task_id, advance=1)
-                                advance_transport_file_progress(1)
-                            complete_transport_file_progress()
-                        except TransportError as exc:
-                            interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
-                                "interrupted by user" in str(exc).lower()
-                            )
-                            if interrupted:
-                                abort_with_cleanup("Stopping workers...")
-                            abort_with_cleanup(f"Transfer aborted: {exc}")
-                        finally:
-                            end_transport_file_progress()
-
-                        step_progress.update(step_task_id, advance=1)
-                        step_progress.stop_task(step_task_id)
-                        step_progress.update(step_task_id, visible=False)
-
-                    if dry_run:
-                        time.sleep(0.2)
-                    system_steps_progress.update(system_steps_task_id, visible=False)
-                    current_system_progress.stop_task(current_task_id)
-                    current_system_progress.update(
-                        current_task_id,
-                        description=f"[bold green]{name} synced ({system_transfer_size})",
-                    )
-                    overall_progress.update(overall_task_id, advance=1)
-
-                overall_progress.update(
-                    overall_task_id,
-                    description=(
-                        f"[bold green]{len(systems)} systems processed "
-                        f"({format_transfer_size(total_transfer_bytes)}), done!"
-                    ),
-                )
-            hide_transport_tasks()
-        except KeyboardInterrupt:
-            abort_with_cleanup("Stopping workers...")
-
-    if dry_run:
-        print(f"Dry-run estimate: {format_transfer_size(total_transfer_bytes)} would be copied.")
-    else:
-        print(f"Estimated transfer volume: {format_transfer_size(total_transfer_bytes)}.")
+    try:
+        runner.run(run_cfg, system_name=system_name)
+    except SyncAbortError as exc:
+        print(str(exc))
+        sys.exit(-1)
 
 
 if __name__ == "__main__":
