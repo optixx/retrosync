@@ -9,6 +9,8 @@ from pathlib import Path
 
 from lxml import etree
 
+from .transports import TransportError
+
 logger = logging.getLogger()
 
 item_tpl = {
@@ -47,14 +49,15 @@ class BiosSync(GlobalJob):
         self.size = self.transport.guess_file_count(self.src, [], True)
         self.transfer_bytes = self.transport.guess_total_size(self.src, [], True)
 
-    def do(self, callback=None):
-        self.transport.copy_files(
-            self.src,
-            self.dst,
-            whitelist=[],
-            recursive=True,
-            callback=callback,
-        )
+    def do(self, callback=None, cancel_check=None):
+        kwargs = {
+            "whitelist": [],
+            "recursive": True,
+            "callback": callback,
+        }
+        if cancel_check is not None:
+            kwargs["cancel_check"] = cancel_check
+        self.transport.copy_files(self.src, self.dst, **kwargs)
 
 
 class ThumbnailsSync(BiosSync):
@@ -76,16 +79,16 @@ class FavoritesSync(BiosSync):
         self.size = 1
         self.transfer_bytes = self.src.stat().st_size if self.src.exists() else 0
 
-    def do(self, callback=None):
+    def do(self, callback=None, cancel_check=None):
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate(
                 self.src,
                 temp_file,
             )
-            self.transport.copy_file(
-                Path(temp_file.name),
-                self.dst,
-            )
+            kwargs = {}
+            if cancel_check is not None:
+                kwargs["cancel_check"] = cancel_check
+            self.transport.copy_file(Path(temp_file.name), self.dst, **kwargs)
             if callback:
                 callback()
 
@@ -163,10 +166,15 @@ class RomSyncJob(SystemJob):
         self.size = self.transport.guess_file_count(self.src, [], True)
         self.transfer_bytes = self.transport.guess_total_size(self.src, [], True)
 
-    def do(self, callback):
-        self.transport.copy_files(
-            self.src, self.dst, whitelist=[], recursive=True, callback=callback
-        )
+    def do(self, callback=None, cancel_check=None):
+        kwargs = {
+            "whitelist": [],
+            "recursive": True,
+            "callback": callback,
+        }
+        if cancel_check is not None:
+            kwargs["cancel_check"] = cancel_check
+        self.transport.copy_files(self.src, self.dst, **kwargs)
 
 
 class PlaylistSyncJob(SystemJob):
@@ -219,12 +227,15 @@ class PlaylistSyncJob(SystemJob):
         temp_file.flush()
         temp_file.seek(0)
 
-    def do(self, callback=None):
+    def do(self, callback=None, cancel_check=None):
         name = self.playlist.get("name")
         with tempfile.NamedTemporaryFile() as temp_file:
             self.migrate_playlist(temp_file)
+            kwargs = {}
+            if cancel_check is not None:
+                kwargs["cancel_check"] = cancel_check
             self.transport.copy_file(
-                Path(temp_file.name), Path(self.default.get("dest_playlists")) / name
+                Path(temp_file.name), Path(self.default.get("dest_playlists")) / name, **kwargs
             )
         if callback:
             callback()
@@ -296,10 +307,12 @@ class PlaylistUpdateJob(SystemJob):
                 name_map[game.attrib["name"]] = title
         return name_map
 
-    def do(self, callback=None):
+    def do(self, callback=None, cancel_check=None):
         name = self.playlist.get("name")
         logger.debug(f"migrate_playlist: name={name}")
         local = Path(self.default.get("src_playlists")) / name
+        if cancel_check and cancel_check():
+            raise TransportError("Transfer interrupted by user.")
         if not self.transport.dry_run:
             self.backup_file(local)
 
@@ -328,6 +341,8 @@ class PlaylistUpdateJob(SystemJob):
 
         file_list = []
         for idx, file in enumerate(files):
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             logger.debug(
                 f"update_playlist: Update first pass [{idx + 1}/{files_len}] path={Path(file).name}"
             )
@@ -340,6 +355,8 @@ class PlaylistUpdateJob(SystemJob):
 
         files_len = len(file_list)
         for idx, file in enumerate(file_list):
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             logger.debug(
                 f"update_playlist: Update second pass [{idx + 1}/{files_len}] path={Path(file).name}"
             )

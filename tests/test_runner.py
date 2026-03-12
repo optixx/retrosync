@@ -21,7 +21,9 @@ class DummyGlobalJob:
         self.size = 1
         self.transfer_bytes = 1024
 
-    def do(self, callback=None):
+    def do(self, callback=None, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise RuntimeError("cancelled")
         if callback:
             callback()
 

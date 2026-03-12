@@ -195,6 +195,7 @@ class SyncRunner:
                     job.size if supports_per_file_progress else 1
                 )
                 try:
+                    cancel_check = cancel_token.is_cancelled
                     if supports_per_file_progress:
 
                         def callback():
@@ -202,7 +203,7 @@ class SyncRunner:
                             self.reporter.advance_transport_file_progress(step=1)
                     else:
                         callback = None
-                    job.do(callback=callback)
+                    job.do(callback=callback, cancel_check=cancel_check)
                     self._raise_if_cancelled(cancel_token)
                     if not supports_per_file_progress:
                         self.reporter.advance_transport_file_progress(step=1)
@@ -270,6 +271,7 @@ class SyncRunner:
                             job.size if supports_per_file_progress else 1
                         )
                         try:
+                            cancel_check = cancel_token.is_cancelled
                             if supports_per_file_progress:
 
                                 def callback(system_steps_task_id=system_steps_task_id):
@@ -280,7 +282,7 @@ class SyncRunner:
                                     self.reporter.advance_transport_file_progress(step=1)
                             else:
                                 callback = None
-                            job.do(callback)
+                            job.do(callback=callback, cancel_check=cancel_check)
                             self._raise_if_cancelled(cancel_token)
                             if not supports_per_file_progress:
                                 self.reporter.advance_system_steps(system_steps_task_id, advance=1)

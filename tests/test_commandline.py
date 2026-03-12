@@ -201,7 +201,9 @@ def test_rom_sync_advances_transport_file_progress_hooks():
         def setup(self, _playlist):
             self.size = 2
 
-        def do(self, callback):
+        def do(self, callback=None, cancel_check=None):
+            if cancel_check and cancel_check():
+                return
             callback()
             callback()
 
@@ -253,7 +255,9 @@ def test_rom_sync_falls_back_to_per_job_progress_when_no_per_file_callbacks():
         def setup(self, _playlist):
             self.size = 5
 
-        def do(self, callback):
+        def do(self, callback=None, cancel_check=None):
+            if cancel_check and cancel_check():
+                return
             if callback:
                 callback()
                 callback()

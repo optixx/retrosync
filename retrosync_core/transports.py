@@ -181,32 +181,38 @@ class TransportUnixBase(TransportBase):
     def build_dest(self, path: Path):
         return f'"{path}"'
 
-    def execute(self, cmd):
+    def execute(self, cmd, cancel_check=None):
         logger.debug(f"execute: cmd={cmd}")
         if self.dry_run:
             return
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
         poll = select.poll()
-        poll.register(p.stdout, select.POLLIN | select.POLLHUP)  # pyright: ignore
-        poll.register(p.stderr, select.POLLIN | select.POLLHUP)  # pyright: ignore
-        pollc = 2
-        events = poll.poll()
-        while pollc > 0 and len(events) > 0:
+        if p.stdout:
+            poll.register(p.stdout, select.POLLIN | select.POLLHUP)  # pyright: ignore
+        if p.stderr:
+            poll.register(p.stderr, select.POLLIN | select.POLLHUP)  # pyright: ignore
+        while p.poll() is None:
+            if cancel_check and cancel_check():
+                logger.debug("execute: cancellation requested, terminating process")
+                p.terminate()
+                try:
+                    p.wait(timeout=2)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+                raise TransportError("Transfer interrupted by user.")
+
+            events = poll.poll(200)
             for event in events:
                 (rfd, event) = event
                 if event & select.POLLIN:
-                    if rfd == p.stdout.fileno():  # pyright: ignore
-                        lines = p.stdout.readlines()  # pyright: ignore
-                        for line in lines:
-                            logger.debug("execute: stdout=%s", line)
-                    if rfd == p.stderr.fileno():  # pyright: ignore
+                    if p.stdout and rfd == p.stdout.fileno():  # pyright: ignore
+                        line = p.stdout.readline()  # pyright: ignore
+                        logger.debug("execute: stdout=%s", line)
+                    if p.stderr and rfd == p.stderr.fileno():  # pyright: ignore
                         line = p.stderr.readline()  # pyright: ignore
                         logger.debug("execute: stderr=%s", line)
                 if event & select.POLLHUP:
                     poll.unregister(rfd)
-                    pollc = pollc - 1
-                if pollc > 0:
-                    events = poll.poll()
         p.wait()
 
     def copy_files(
@@ -216,6 +222,7 @@ class TransportUnixBase(TransportBase):
         whitelist: list,
         recursive: bool = False,
         callback=None,
+        cancel_check=None,
     ):
         self.ensure_dir_exists(dest_path)
         args = "--outbuf=L --progress --verbose --human-readable --recursive --size-only --delete "
@@ -227,7 +234,7 @@ class TransportUnixBase(TransportBase):
                 args += f'--include="*{item}" '
             args += '--exclude="*" '
         cmd = f'{self.command_prefix()} rsync {args} "{src_path}/" {self.build_dest(dest_path)}'
-        self.execute(cmd)
+        self.execute(cmd, cancel_check=cancel_check)
 
 
 class TransportFileSystemUnix(TransportUnixBase):
@@ -240,8 +247,10 @@ class TransportFileSystemUnix(TransportUnixBase):
             if not path_directory.is_dir():
                 path_directory.mkdir(parents=True)
 
-    def copy_file(self, src_filename: Path, dest_filename: Path):
+    def copy_file(self, src_filename: Path, dest_filename: Path, cancel_check=None):
         self.ensure_dir_exists(dest_filename.parent)
+        if cancel_check and cancel_check():
+            raise TransportError("Transfer interrupted by user.")
         if not self.dry_run:
             shutil.copy(src_filename, dest_filename)
 
@@ -260,9 +269,11 @@ class TransportSSHUnix(TransportUnixBase):
         username = self.default.get("username")
         return f'"{username}@{hostname}:{path}"'
 
-    def copy_file(self, src_filename: Path, dest_filename: Path):
+    def copy_file(self, src_filename: Path, dest_filename: Path, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise TransportError("Transfer interrupted by user.")
         cmd = f'{self.command_prefix()} scp "{src_filename}" {self.build_dest(dest_filename)}'
-        self.execute(cmd)
+        self.execute(cmd, cancel_check=cancel_check)
 
     def ensure_dir_exists(self, path_directory: Path):
         hostname = self.default.get("hostname")
@@ -465,12 +476,16 @@ class TransportWebDAV(TransportBase):
             with self._dir_lock:
                 self._known_dirs.add(current)
 
-    def copy_file(self, src_filename: Path, dest_filename: Path, *, ensure_parent=True):
+    def copy_file(
+        self, src_filename: Path, dest_filename: Path, *, ensure_parent=True, cancel_check=None
+    ):
         if self.dry_run:
             logger.debug(
                 "TransportWebDAV::copy_file: dry-run %s -> %s", src_filename, dest_filename
             )
             return
+        if cancel_check and cancel_check():
+            raise TransportError("Transfer interrupted by user.")
         if ensure_parent:
             self.ensure_dir_exists(dest_filename.parent)
         file_size = src_filename.stat().st_size
@@ -483,6 +498,8 @@ class TransportWebDAV(TransportBase):
         )
         started = time.monotonic()
         with open(src_filename, "rb") as fd:
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             self._request(
                 "PUT", remote, body=fd, headers={"Content-Type": "application/octet-stream"}
             )
@@ -502,6 +519,7 @@ class TransportWebDAV(TransportBase):
         whitelist: list,
         recursive: bool = False,
         callback=None,
+        cancel_check=None,
     ):
         if self.dry_run:
             logger.debug("TransportWebDAV::copy_files: dry-run %s -> %s", src_path, dest_path)
@@ -514,6 +532,8 @@ class TransportWebDAV(TransportBase):
 
         files = []
         for src_filename in generator:
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             if src_filename.is_dir():
                 continue
             rel = src_filename.relative_to(src_path)
@@ -529,10 +549,14 @@ class TransportWebDAV(TransportBase):
 
         unique_parents = sorted({dest.parent for _, dest in files}, key=lambda p: len(p.parts))
         for parent in unique_parents:
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             self.ensure_dir_exists(parent)
 
         if self.max_workers <= 1 or total == 1:
             for idx, (src_filename, dest_filename) in enumerate(files, start=1):
+                if cancel_check and cancel_check():
+                    raise TransportError("Transfer interrupted by user.")
                 logger.debug(
                     "TransportWebDAV::copy_files: [%s/%s] %s -> %s",
                     idx,
@@ -540,7 +564,12 @@ class TransportWebDAV(TransportBase):
                     src_filename,
                     dest_filename,
                 )
-                self.copy_file(src_filename, dest_filename, ensure_parent=False)
+                self.copy_file(
+                    src_filename,
+                    dest_filename,
+                    ensure_parent=False,
+                    cancel_check=cancel_check,
+                )
                 if callback:
                     callback()
             return
@@ -552,13 +581,19 @@ class TransportWebDAV(TransportBase):
         )
 
         def upload_one(src_filename, dest_filename):
-            self.copy_file(src_filename, dest_filename, ensure_parent=False)
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
+            self.copy_file(
+                src_filename, dest_filename, ensure_parent=False, cancel_check=cancel_check
+            )
 
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=self.max_workers)
         interrupted = False
         future_to_index = {}
         try:
             for idx, (src_filename, dest_filename) in enumerate(files, start=1):
+                if cancel_check and cancel_check():
+                    raise TransportError("Transfer interrupted by user.")
                 logger.debug(
                     "TransportWebDAV::copy_files: queue [%s/%s] %s -> %s",
                     idx,
@@ -570,6 +605,8 @@ class TransportWebDAV(TransportBase):
                 future_to_index[future] = idx
 
             for future in concurrent.futures.as_completed(future_to_index):
+                if cancel_check and cancel_check():
+                    raise TransportError("Transfer interrupted by user.")
                 idx = future_to_index[future]
                 future.result()
                 logger.debug("TransportWebDAV::copy_files: completed [%s/%s]", idx, total)
@@ -610,7 +647,9 @@ class TransportFileSystemWindows(TransportWindowsBase):
             if not path_directory.is_dir():
                 path_directory.mkdir(parents=True)
 
-    def copy_file(self, src_filename: Path, dest_filename: Path):
+    def copy_file(self, src_filename: Path, dest_filename: Path, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise TransportError("Transfer interrupted by user.")
         self.ensure_dir_exists(dest_filename.parent)
         if not self.dry_run:
             shutil.copy(src_filename, dest_filename)
@@ -622,12 +661,15 @@ class TransportFileSystemWindows(TransportWindowsBase):
         whitelist: list,
         recursive: bool = False,
         callback=None,
+        cancel_check=None,
     ):
         guessed_len = self.guess_file_count(src_path, whitelist, recursive)
         logger.debug(f"TransportFileSystemWindows::copy_files: {src_path} -> {dest_path}")
         self.ensure_dir_exists(dest_path)
         cnt = 1
         for item in src_path.iterdir():
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             logger.debug(
                 f"TransportFileSystemWindows::copy_files: [{cnt}/{guessed_len}] {item.name}"
             )
@@ -639,7 +681,7 @@ class TransportFileSystemWindows(TransportWindowsBase):
             d = dest_path / item.name
             if s.is_dir():
                 if recursive:
-                    self.copy_files(s, d, whitelist, recursive, callback)
+                    self.copy_files(s, d, whitelist, recursive, callback, cancel_check=cancel_check)
                 continue
             else:
                 if whitelist and s.suffix not in whitelist:
@@ -686,7 +728,9 @@ class TransportSSHWindows(TransportWindowsBase):
         logger.debug("TransportSSHWindows::connect sftp opened")
         self.connected = True
 
-    def copy_file(self, src_filename: Path, dest_filename: Path):
+    def copy_file(self, src_filename: Path, dest_filename: Path, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise TransportError("Transfer interrupted by user.")
         self.connect()
         if self.dry_run:
             logger.debug(
@@ -730,6 +774,7 @@ class TransportSSHWindows(TransportWindowsBase):
         whitelist: list,
         recursive: bool = False,
         callback=None,
+        cancel_check=None,
     ):
         guessed_len = self.guess_file_count(src_path, whitelist, recursive)
         logger.debug(f"TransportSSHWindows::copy_files: {src_path} -> {dest_path}")
@@ -738,6 +783,8 @@ class TransportSSHWindows(TransportWindowsBase):
         cnt = 1
 
         for _, src_filename in enumerate(src_path.iterdir()):
+            if cancel_check and cancel_check():
+                raise TransportError("Transfer interrupted by user.")
             logger.debug(
                 f"TransportSSHWindows::copy_files: [{cnt}/{guessed_len}] {src_filename.name}"
             )
@@ -749,7 +796,12 @@ class TransportSSHWindows(TransportWindowsBase):
             if src_filename.is_dir():
                 if recursive:
                     self.copy_files(
-                        src_filename, dest_path / src_filename.name, whitelist, recursive, callback
+                        src_filename,
+                        dest_path / src_filename.name,
+                        whitelist,
+                        recursive,
+                        callback,
+                        cancel_check=cancel_check,
                     )
                 else:
                     continue
