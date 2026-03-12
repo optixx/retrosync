@@ -1,6 +1,7 @@
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Event, Lock
 from typing import Protocol
 
 from .jobs import (
@@ -84,6 +85,26 @@ class SyncAbortError(Exception):
     pass
 
 
+class CancelToken:
+    def __init__(self):
+        self._event = Event()
+        self._lock = Lock()
+        self._reason = "Sync cancelled."
+
+    def cancel(self, reason=None):
+        with self._lock:
+            if reason:
+                self._reason = str(reason)
+            self._event.set()
+
+    def is_cancelled(self):
+        return self._event.is_set()
+
+    def reason(self):
+        with self._lock:
+            return self._reason
+
+
 class SyncRunner:
     def __init__(
         self,
@@ -100,7 +121,12 @@ class SyncRunner:
         self.reporter = reporter
         self.job_registry = job_registry or JobRegistry()
 
-    def run(self, cfg: SyncRunConfig, *, system_name=None):
+    def _raise_if_cancelled(self, cancel_token):
+        if cancel_token.is_cancelled():
+            raise SyncAbortError(cancel_token.reason())
+
+    def run(self, cfg: SyncRunConfig, *, system_name=None, cancel_token=None):
+        cancel_token = cancel_token or CancelToken()
         jobs = []
         if cfg.do_sync_bios:
             jobs.append(self.job_registry.bios_sync(self.default, self.playlists, self.transport))
@@ -156,7 +182,9 @@ class SyncRunner:
             overall_total=overall_total, supports_per_file_progress=supports_per_file_progress
         )
         try:
+            self._raise_if_cancelled(cancel_token)
             for idx, job in enumerate(jobs):
+                self._raise_if_cancelled(cancel_token)
                 top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
                 self.reporter.update_overall(description=top_descr)
                 job_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
@@ -167,12 +195,15 @@ class SyncRunner:
                     job.size if supports_per_file_progress else 1
                 )
                 try:
-                    callback = (
-                        (lambda: self.reporter.advance_transport_file_progress(step=1))
-                        if supports_per_file_progress
-                        else None
-                    )
+                    if supports_per_file_progress:
+
+                        def callback():
+                            self._raise_if_cancelled(cancel_token)
+                            self.reporter.advance_transport_file_progress(step=1)
+                    else:
+                        callback = None
                     job.do(callback=callback)
+                    self._raise_if_cancelled(cancel_token)
                     if not supports_per_file_progress:
                         self.reporter.advance_transport_file_progress(step=1)
                     self.reporter.complete_transport_file_progress()
@@ -203,6 +234,7 @@ class SyncRunner:
 
             if cfg.do_update_playlists or cfg.do_sync_playlists or cfg.do_sync_roms:
                 for idx, key in enumerate(systems.keys()):
+                    self._raise_if_cancelled(cancel_token)
                     name = systems[key]["name"]
                     playlist = systems[key]["playlist"]
                     top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
@@ -225,6 +257,7 @@ class SyncRunner:
                         name=name, total=system_steps_total
                     )
                     for job in system_jobs:
+                        self._raise_if_cancelled(cancel_token)
                         step_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
                         step_task_id = self.reporter.add_step_task(
                             action=f"{job.name} ({step_size})", name=name
@@ -237,19 +270,18 @@ class SyncRunner:
                             job.size if supports_per_file_progress else 1
                         )
                         try:
-                            callback = (
-                                (
-                                    lambda system_steps_task_id=system_steps_task_id: (
-                                        self.reporter.advance_system_steps(
-                                            system_steps_task_id, advance=1
-                                        ),
-                                        self.reporter.advance_transport_file_progress(step=1),
+                            if supports_per_file_progress:
+
+                                def callback(system_steps_task_id=system_steps_task_id):
+                                    self._raise_if_cancelled(cancel_token)
+                                    self.reporter.advance_system_steps(
+                                        system_steps_task_id, advance=1
                                     )
-                                )
-                                if supports_per_file_progress
-                                else None
-                            )
+                                    self.reporter.advance_transport_file_progress(step=1)
+                            else:
+                                callback = None
                             job.do(callback)
+                            self._raise_if_cancelled(cancel_token)
                             if not supports_per_file_progress:
                                 self.reporter.advance_system_steps(system_steps_task_id, advance=1)
                                 self.reporter.advance_transport_file_progress(step=1)
