@@ -1,5 +1,6 @@
 import pytest
 
+from retrosync_core.events import EventType, MemoryEventSink
 from retrosync_core.runner import (
     CancelToken,
     JobRegistry,
@@ -7,6 +8,7 @@ from retrosync_core.runner import (
     SyncRunConfig,
     SyncRunner,
 )
+from retrosync_core.transports import TransportError
 
 
 class DummyTransport:
@@ -26,6 +28,17 @@ class DummyGlobalJob:
             raise RuntimeError("cancelled")
         if callback:
             callback()
+
+
+class DummyFailJob:
+    name = "DummyFail"
+
+    def __init__(self, default, playlists, transport):
+        self.size = 1
+        self.transfer_bytes = 1024
+
+    def do(self, callback=None, cancel_check=None):
+        raise TransportError("kaboom")
 
 
 class DummyReporter:
@@ -107,12 +120,14 @@ def test_runner_respects_pre_cancelled_token():
     token = CancelToken()
     token.cancel("Cancelled before run.")
     reporter = DummyReporter()
+    sink = MemoryEventSink()
     runner = SyncRunner(
         default={},
         playlists=[],
         transport=DummyTransport(),
         reporter=reporter,
         job_registry=JobRegistry(bios_sync=DummyGlobalJob),
+        event_sink=sink,
     )
 
     with pytest.raises(SyncAbortError, match="Cancelled before run."):
@@ -120,17 +135,21 @@ def test_runner_respects_pre_cancelled_token():
 
     assert reporter.started is True
     assert reporter.finished is True
+    assert sink.events[0].event_type == EventType.RUN_STARTED
+    assert sink.events[-1].event_type == EventType.RUN_CANCELLED
 
 
 def test_runner_cancels_after_callback_progress():
     token = CancelToken()
     reporter = DummyReporter(cancel_token=token, cancel_on_first_advance=True)
+    sink = MemoryEventSink()
     runner = SyncRunner(
         default={},
         playlists=[],
         transport=DummyTransport(),
         reporter=reporter,
         job_registry=JobRegistry(bios_sync=DummyGlobalJob),
+        event_sink=sink,
     )
 
     with pytest.raises(SyncAbortError, match="Cancelled by user."):
@@ -138,3 +157,46 @@ def test_runner_cancels_after_callback_progress():
 
     assert reporter.advance_calls == 1
     assert reporter.finished is True
+    assert any(e.event_type == EventType.TRANSFER_ADVANCED for e in sink.events)
+    assert sink.events[-1].event_type == EventType.RUN_CANCELLED
+
+
+def test_runner_emits_success_event_sequence():
+    reporter = DummyReporter()
+    sink = MemoryEventSink()
+    runner = SyncRunner(
+        default={},
+        playlists=[],
+        transport=DummyTransport(),
+        reporter=reporter,
+        job_registry=JobRegistry(bios_sync=DummyGlobalJob),
+        event_sink=sink,
+    )
+
+    runner.run(_cfg())
+
+    event_types = [e.event_type for e in sink.events]
+    assert event_types[0] == EventType.RUN_STARTED
+    assert EventType.JOB_STARTED in event_types
+    assert EventType.JOB_FINISHED in event_types
+    assert EventType.RUN_FINISHED in event_types
+    assert event_types[-1] == EventType.SUMMARY_EMITTED
+
+
+def test_runner_emits_failed_event():
+    reporter = DummyReporter()
+    sink = MemoryEventSink()
+    runner = SyncRunner(
+        default={},
+        playlists=[],
+        transport=DummyTransport(),
+        reporter=reporter,
+        job_registry=JobRegistry(bios_sync=DummyFailJob),
+        event_sink=sink,
+    )
+
+    with pytest.raises(SyncAbortError, match="Transfer aborted:"):
+        runner.run(_cfg())
+
+    assert sink.events[0].event_type == EventType.RUN_STARTED
+    assert sink.events[-1].event_type == EventType.RUN_FAILED

@@ -1,9 +1,12 @@
 import time
+import uuid
+import logging
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Event, Lock
 from typing import Protocol
 
+from .events import EventType, NullEventSink, SyncEvent
 from .jobs import (
     BiosSync,
     FavoritesSync,
@@ -13,6 +16,8 @@ from .jobs import (
     ThumbnailsSync,
 )
 from .transports import TransportError
+
+logger = logging.getLogger(__name__)
 
 
 def format_transfer_size(num_bytes):
@@ -114,12 +119,32 @@ class SyncRunner:
         transport,
         reporter: SyncReporter,
         job_registry: JobRegistry | None = None,
+        event_sink=None,
     ):
         self.default = default
         self.playlists = playlists
         self.transport = transport
         self.reporter = reporter
         self.job_registry = job_registry or JobRegistry()
+        self.event_sink = event_sink or NullEventSink()
+        self.run_id = str(uuid.uuid4())
+
+    def _emit(self, event_type: EventType, **kwargs):
+        event = SyncEvent(event_type=event_type, run_id=self.run_id, **kwargs)
+        logger.debug(
+            "event: type=%s run_id=%s system=%s job=%s step=%s msg=%s err=%s advance=%s total=%s bytes=%s",
+            event.event_type.value,
+            event.run_id,
+            event.system,
+            event.job,
+            event.step,
+            event.message,
+            event.error,
+            event.advance,
+            event.total,
+            event.bytes_estimated,
+        )
+        self.event_sink.emit(event)
 
     def _raise_if_cancelled(self, cancel_token):
         if cancel_token.is_cancelled():
@@ -181,33 +206,52 @@ class SyncRunner:
         self.reporter.start(
             overall_total=overall_total, supports_per_file_progress=supports_per_file_progress
         )
+        self._emit(
+            EventType.RUN_STARTED,
+            total=overall_total,
+            bytes_estimated=total_transfer_bytes,
+            data={
+                "supports_per_file_progress": supports_per_file_progress,
+                "dry_run": cfg.dry_run,
+            },
+        )
         try:
             self._raise_if_cancelled(cancel_token)
             for idx, job in enumerate(jobs):
                 self._raise_if_cancelled(cancel_token)
                 top_descr = f"[bold #AAAAAA]({idx} out of {len(jobs)} jobs done)"
                 self.reporter.update_overall(description=top_descr)
+                self._emit(EventType.OVERALL_UPDATED, message=top_descr)
                 job_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
+                self._emit(
+                    EventType.JOB_STARTED,
+                    job=job.name,
+                    bytes_estimated=getattr(job, "transfer_bytes", 0),
+                )
                 current_task_id = self.reporter.add_current_task(f"Run job {job.name} ({job_size})")
                 system_steps_task_id = self.reporter.add_system_steps(name=job.name, total=2)
                 self.reporter.advance_system_steps(system_steps_task_id, advance=1)
                 self.reporter.begin_transport_file_progress(
                     job.size if supports_per_file_progress else 1
                 )
+                self._emit(EventType.TRANSFER_STARTED, job=job.name, total=job.size)
                 try:
                     cancel_check = cancel_token.is_cancelled
                     if supports_per_file_progress:
 
-                        def callback():
+                        def callback(job_name=job.name):
                             self._raise_if_cancelled(cancel_token)
                             self.reporter.advance_transport_file_progress(step=1)
+                            self._emit(EventType.TRANSFER_ADVANCED, job=job_name, advance=1)
                     else:
                         callback = None
                     job.do(callback=callback, cancel_check=cancel_check)
                     self._raise_if_cancelled(cancel_token)
                     if not supports_per_file_progress:
                         self.reporter.advance_transport_file_progress(step=1)
+                        self._emit(EventType.TRANSFER_ADVANCED, job=job.name, advance=1)
                     self.reporter.complete_transport_file_progress()
+                    self._emit(EventType.TRANSFER_FINISHED, job=job.name)
                 except TransportError as exc:
                     interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
                         "interrupted by user" in str(exc).lower()
@@ -224,13 +268,25 @@ class SyncRunner:
                 self.reporter.stop_current_task(
                     current_task_id, description=f"[bold green]{job.name} synced ({job_size})"
                 )
+                self._emit(
+                    EventType.JOB_FINISHED,
+                    job=job.name,
+                    bytes_estimated=getattr(job, "transfer_bytes", 0),
+                )
                 self.reporter.update_overall(advance=1)
+                self._emit(EventType.OVERALL_UPDATED, advance=1)
 
             self.reporter.update_overall(
                 description=(
                     f"[bold green]{len(jobs)} jobs processed "
                     f"({format_transfer_size(total_transfer_bytes)}), done!"
                 )
+            )
+            self._emit(
+                EventType.OVERALL_UPDATED,
+                message=(
+                    f"{len(jobs)} jobs processed ({format_transfer_size(total_transfer_bytes)}), done!"
+                ),
             )
 
             if cfg.do_update_playlists or cfg.do_sync_playlists or cfg.do_sync_roms:
@@ -240,7 +296,13 @@ class SyncRunner:
                     playlist = systems[key]["playlist"]
                     top_descr = f"[bold #AAAAAA]({idx} out of {len(systems)} systems synced)"
                     self.reporter.update_overall(description=top_descr)
+                    self._emit(EventType.OVERALL_UPDATED, message=top_descr, system=name)
                     system_transfer_size = format_transfer_size(systems[key]["transfer_bytes"])
+                    self._emit(
+                        EventType.SYSTEM_STARTED,
+                        system=name,
+                        bytes_estimated=systems[key]["transfer_bytes"],
+                    )
                     current_task_id = self.reporter.add_current_task(
                         f"Syncing system {name} ({system_transfer_size})"
                     )
@@ -260,6 +322,13 @@ class SyncRunner:
                     for job in system_jobs:
                         self._raise_if_cancelled(cancel_token)
                         step_size = format_transfer_size(getattr(job, "transfer_bytes", 0))
+                        self._emit(
+                            EventType.STEP_STARTED,
+                            system=name,
+                            job=job.name,
+                            step=job.name,
+                            bytes_estimated=getattr(job, "transfer_bytes", 0),
+                        )
                         step_task_id = self.reporter.add_step_task(
                             action=f"{job.name} ({step_size})", name=name
                         )
@@ -270,16 +339,32 @@ class SyncRunner:
                         self.reporter.begin_transport_file_progress(
                             job.size if supports_per_file_progress else 1
                         )
+                        self._emit(
+                            EventType.TRANSFER_STARTED,
+                            system=name,
+                            job=job.name,
+                            total=job.size,
+                        )
                         try:
                             cancel_check = cancel_token.is_cancelled
                             if supports_per_file_progress:
 
-                                def callback(system_steps_task_id=system_steps_task_id):
+                                def callback(
+                                    system_steps_task_id=system_steps_task_id,
+                                    system_name=name,
+                                    job_name=job.name,
+                                ):
                                     self._raise_if_cancelled(cancel_token)
                                     self.reporter.advance_system_steps(
                                         system_steps_task_id, advance=1
                                     )
                                     self.reporter.advance_transport_file_progress(step=1)
+                                    self._emit(
+                                        EventType.TRANSFER_ADVANCED,
+                                        system=system_name,
+                                        job=job_name,
+                                        advance=1,
+                                    )
                             else:
                                 callback = None
                             job.do(callback=callback, cancel_check=cancel_check)
@@ -287,7 +372,14 @@ class SyncRunner:
                             if not supports_per_file_progress:
                                 self.reporter.advance_system_steps(system_steps_task_id, advance=1)
                                 self.reporter.advance_transport_file_progress(step=1)
+                                self._emit(
+                                    EventType.TRANSFER_ADVANCED,
+                                    system=name,
+                                    job=job.name,
+                                    advance=1,
+                                )
                             self.reporter.complete_transport_file_progress()
+                            self._emit(EventType.TRANSFER_FINISHED, system=name, job=job.name)
                         except TransportError as exc:
                             interrupted = isinstance(exc.__cause__, KeyboardInterrupt) or (
                                 "interrupted by user" in str(exc).lower()
@@ -299,6 +391,9 @@ class SyncRunner:
                             self.reporter.end_transport_file_progress()
 
                         self.reporter.finish_step_task(step_task_id)
+                        self._emit(
+                            EventType.STEP_FINISHED, system=name, job=job.name, step=job.name
+                        )
 
                     if cfg.dry_run:
                         time.sleep(0.2)
@@ -307,7 +402,13 @@ class SyncRunner:
                         current_task_id,
                         description=f"[bold green]{name} synced ({system_transfer_size})",
                     )
+                    self._emit(
+                        EventType.SYSTEM_FINISHED,
+                        system=name,
+                        bytes_estimated=systems[key]["transfer_bytes"],
+                    )
                     self.reporter.update_overall(advance=1)
+                    self._emit(EventType.OVERALL_UPDATED, advance=1, system=name)
 
                 self.reporter.update_overall(
                     description=(
@@ -315,19 +416,33 @@ class SyncRunner:
                         f"({format_transfer_size(total_transfer_bytes)}), done!"
                     )
                 )
+                self._emit(
+                    EventType.OVERALL_UPDATED,
+                    message=(
+                        f"{len(systems)} systems processed ({format_transfer_size(total_transfer_bytes)}), done!"
+                    ),
+                )
             self.reporter.hide_transport_tasks()
+            self._emit(EventType.RUN_FINISHED, bytes_estimated=total_transfer_bytes)
+        except SyncAbortError as exc:
+            if cancel_token.is_cancelled() or "cancel" in str(exc).lower():
+                self._emit(EventType.RUN_CANCELLED, message=str(exc), error=str(exc))
+            else:
+                self._emit(EventType.RUN_FAILED, message=str(exc), error=str(exc))
+            raise
         except KeyboardInterrupt as exc:
+            self._emit(EventType.RUN_CANCELLED, message="Stopping workers...", error=str(exc))
             raise SyncAbortError("Stopping workers...") from exc
         finally:
             self.reporter.finish()
 
         if cfg.dry_run:
-            self.reporter.emit_summary(
+            summary = (
                 f"Dry-run estimate: {format_transfer_size(total_transfer_bytes)} would be copied."
             )
         else:
-            self.reporter.emit_summary(
-                f"Estimated transfer volume: {format_transfer_size(total_transfer_bytes)}."
-            )
+            summary = f"Estimated transfer volume: {format_transfer_size(total_transfer_bytes)}."
+        self.reporter.emit_summary(summary)
+        self._emit(EventType.SUMMARY_EMITTED, message=summary, bytes_estimated=total_transfer_bytes)
 
         return total_transfer_bytes
