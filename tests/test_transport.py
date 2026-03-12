@@ -347,7 +347,7 @@ def test_transport_webdav_requires_host():
         "username": "",
         "password": "",
     }
-    with pytest.raises(SystemExit):
+    with pytest.raises(TransportError, match="WebDAV transport requires \\[webdav\\].host"):
         TransportWebDAV(default, dry_run=True)
 
 

@@ -375,35 +375,34 @@ def main(
                 sys.exit(-1)
             system_name = matches[selected - 1]
 
-    transport = TransportFactory(default, dry_run, force_transport)
-    runner = SyncRunner(
-        default=default,
-        playlists=playlists,
-        transport=transport,
-        reporter=CliRichReporter(),
-        job_registry=JobRegistry(
-            bios_sync=BiosSync,
-            favorites_sync=FavoritesSync,
-            thumbnails_sync=ThumbnailsSync,
-            playlist_sync_job=PlaylistSyncJob,
-            playlist_update_job=PlaylistUpdateJob,
-            rom_sync_job=RomSyncJob,
-        ),
-    )
-    run_cfg = SyncRunConfig(
-        do_sync_playlists=do_sync_playlists,
-        do_sync_bios=do_sync_bios,
-        do_sync_favorites=do_sync_favorites,
-        do_sync_thumbnails=do_sync_thumbails,
-        do_sync_roms=do_sync_roms,
-        do_update_playlists=do_update_playlists,
-        dry_run=dry_run,
-        do_debug=do_debug,
-    )
-
     try:
+        transport = TransportFactory(default, dry_run, force_transport)
+        runner = SyncRunner(
+            default=default,
+            playlists=playlists,
+            transport=transport,
+            reporter=CliRichReporter(),
+            job_registry=JobRegistry(
+                bios_sync=BiosSync,
+                favorites_sync=FavoritesSync,
+                thumbnails_sync=ThumbnailsSync,
+                playlist_sync_job=PlaylistSyncJob,
+                playlist_update_job=PlaylistUpdateJob,
+                rom_sync_job=RomSyncJob,
+            ),
+        )
+        run_cfg = SyncRunConfig(
+            do_sync_playlists=do_sync_playlists,
+            do_sync_bios=do_sync_bios,
+            do_sync_favorites=do_sync_favorites,
+            do_sync_thumbnails=do_sync_thumbails,
+            do_sync_roms=do_sync_roms,
+            do_update_playlists=do_update_playlists,
+            dry_run=dry_run,
+            do_debug=do_debug,
+        )
         runner.run(run_cfg, system_name=system_name)
-    except SyncAbortError as exc:
+    except (SyncAbortError, TransportError) as exc:
         print(str(exc))
         sys.exit(-1)
 

@@ -6,7 +6,6 @@ import platform
 import select
 import shutil
 import subprocess
-import sys
 import threading
 import time
 import urllib.error
@@ -80,10 +79,10 @@ class TransportFactory:
         elif current_platform in ["Windows"]:
             return TransportWindowsBase.getInstance(default, dry_run)
         else:
-            print(
-                f"This script only runs on macOS, Linux or Windows but you're using {current_platform}. Exiting..."
+            raise TransportError(
+                "This script only runs on macOS, Linux or Windows "
+                f"but you're using {current_platform}."
             )
-            sys.exit(1)
 
 
 class TransportBase:
@@ -166,8 +165,7 @@ class TransportUnixBase(TransportBase):
     def check_executable_exists(self, executable_name):
         executable_path = shutil.which(executable_name)
         if not executable_path:
-            print(f"Executable '{executable_name}' not found.")
-            sys.exit(-1)
+            raise TransportError(f"Executable '{executable_name}' not found.")
 
     def check(self):
         pass
@@ -327,8 +325,7 @@ class TransportWebDAV(TransportBase):
             self.max_workers,
         )
         if not self.base_url:
-            print("WebDAV transport requires [webdav].host in the config.")
-            sys.exit(-1)
+            raise TransportError("WebDAV transport requires [webdav].host in the config.")
 
     def _normalize_base_url(self, host):
         if not host:

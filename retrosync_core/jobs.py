@@ -97,8 +97,9 @@ class FavoritesSync(BiosSync):
             for p in playlists:
                 if p.get("src_core_name") == src_core_name:
                     return p
-            print(f"Can not find core {src_core_name}")
-            raise AssertionError()
+            raise TransportError(
+                f"Cannot find playlist mapping for core '{src_core_name}' while migrating favorites."
+            )
 
         logger.debug(f"migrate: filename={favorites_file}")
         with open(favorites_file) as file:
