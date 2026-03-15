@@ -102,6 +102,13 @@ src_core_path = "mgba_libretro"
 src_core_name = "Nintendo - Game Boy Advance (mGBA)"
 
 [[playlists]]
+name = "Nintendo - GameCube.lpl"
+src_folder = "Nintendo - GameCube"
+# dest_folder omitted -> defaults to src_folder
+src_core_path = "dolphin_libretro"
+src_core_name = "Nintendo - GameCube / Wii (Dolphin)"
+
+[[playlists]]
 name = "Sharp - X68000.lpl"
 src_folder = "Sharp - X68000"
 # Make sure to include all zip files matching the "FD" pattern

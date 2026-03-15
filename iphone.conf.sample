@@ -5,8 +5,8 @@ src_retroarch_base = "~/Library/Application Support/RetroArch"
 src_roms = ["~/Dropbox/Software/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
 src_flavor = "apple"
 
-dest_retroarch_base = "~/Downloads/ipad/Retroach"
-dest_roms = "~/Downloads/ipad/Roms"
+dest_retroarch_base = "~/Downloads/iphone/Retroach"
+dest_roms = "~/Downloads/iphone/Roms"
 
 target_roms =  "~/Documents/Roms"
 target_cores = "/Frameworks"

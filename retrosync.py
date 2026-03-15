@@ -8,11 +8,16 @@ __email__ = "david@optixx.org"
 
 import concurrent
 import logging
+import os
+import re
 import sys
+from pathlib import Path
 
 import click
 import toml
+from rich.console import Console
 from rich.live import Live
+from rich.table import Table
 
 from retrosync_core.config import (
     PlaylistConfigModel,
@@ -115,8 +120,75 @@ __all__ = [
     "end_transport_file_progress",
     "set_transport_status",
     "concurrent",
+    "count_playlist_roms",
+    "list_playlists",
     "main",
 ]
+
+
+def count_playlist_roms(default, playlist):
+    src_folder = playlist.get("src_folder")
+    if src_folder is None:
+        raise ValueError(f"[playlists] '{playlist.get('name')}' is missing 'src_folder'")
+
+    whitelist = playlist.get("src_whitelist")
+    blacklist = playlist.get("src_blacklist")
+    whitelist_pattern = re.compile(whitelist) if whitelist else None
+    blacklist_pattern = re.compile(blacklist) if blacklist else None
+
+    src_roots = default.get("src_roms", [])
+    if not src_roots:
+        return 0, [], []
+
+    count = 0
+    total_size = 0
+    unreadable_paths = []
+    src_rom_dir = Path(src_roots[0]) / src_folder
+    resolved_paths = [str(src_rom_dir)]
+    if not src_rom_dir.exists() or not src_rom_dir.is_dir():
+        return count, total_size, resolved_paths, unreadable_paths
+    if not os.access(src_rom_dir, os.R_OK):
+        unreadable_paths.append(str(src_rom_dir))
+        return count, total_size, resolved_paths, unreadable_paths
+
+    try:
+        for file in sorted(src_rom_dir.rglob("*")):
+            if not file.is_file():
+                continue
+            file_str = str(file)
+            if blacklist_pattern and blacklist_pattern.search(file_str):
+                continue
+            if whitelist_pattern and not whitelist_pattern.search(file_str):
+                continue
+            count += 1
+            total_size += file.stat().st_size
+    except PermissionError:
+        unreadable_paths.append(str(src_rom_dir))
+
+    return count, total_size, resolved_paths, unreadable_paths
+
+
+def list_playlists(default, playlists):
+    if not default.get("src_roms"):
+        raise ValueError("[default] 'src_roms' is required for --playlist-list")
+
+    table = Table(title="Configured Playlists")
+    table.add_column("System", style="bold")
+    table.add_column("ROM Count", justify="right")
+    table.add_column("ROM Size", justify="right")
+
+    for playlist in playlists:
+        count, total_size, resolved_paths, unreadable_paths = count_playlist_roms(default, playlist)
+        system_name = Path(playlist.get("name", "")).stem
+        if playlist.get("disabled", False):
+            system_name = f"{system_name} 🛑"
+        table.add_row(
+            system_name,
+            "n/a" if unreadable_paths else str(count),
+            "n/a" if unreadable_paths else f"{total_size / (1024**3):.2f} GB",
+        )
+
+    Console(width=240).print(table)
 
 
 class CliRichReporter:
@@ -237,6 +309,12 @@ class CliRichReporter:
     help="Update local playlist files by scanning the ROM directories for results",
 )
 @click.option(
+    "--playlist-list",
+    "do_playlist_list",
+    is_flag=True,
+    help="List configured playlists with source ROM counts",
+)
+@click.option(
     "--name",
     "-n",
     "system_name",
@@ -288,6 +366,7 @@ def main(
     do_sync_thumbails,
     do_sync_roms,
     do_update_playlists,
+    do_playlist_list,
     system_name,
     config_file,
     transport_override,
@@ -327,6 +406,7 @@ def main(
             do_sync_favorites,
             do_sync_thumbails,
             do_update_playlists,
+            do_playlist_list,
         ]
     ):
         click.echo(click.get_current_context().get_help())
@@ -354,6 +434,14 @@ def main(
     except ValueError as exc:
         print(str(exc))
         sys.exit(-1)
+
+    if do_playlist_list:
+        try:
+            list_playlists(default, playlists)
+        except ValueError as exc:
+            print(str(exc))
+            sys.exit(-1)
+        sys.exit(0)
 
     if system_name:
         matches = rank_system_matches(system_name, playlists)

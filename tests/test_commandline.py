@@ -283,3 +283,77 @@ def test_rom_sync_falls_back_to_per_job_progress_when_no_per_file_callbacks():
     begin_mock.assert_called_once_with(1)
     assert advance_mock.call_count == 1
     complete_mock.assert_called_once()
+
+
+def test_playlist_list_outputs_system_status_counts_and_paths(tmp_path):
+    roms_a = tmp_path / "roms-a"
+    roms_b = tmp_path / "roms-b"
+    (roms_a / "NES").mkdir(parents=True)
+    (roms_b / "NES").mkdir(parents=True)
+    (roms_a / "PSX").mkdir(parents=True)
+    (roms_a / "NES" / "Mario.zip").write_bytes(b"a" * 1048576)
+    (roms_b / "NES" / "Zelda.zip").write_bytes(b"b" * 524288)
+    (roms_a / "PSX" / "Metal Gear Solid.cue").write_bytes(b"c" * 2097152)
+    (roms_a / "PSX" / "Metal Gear Solid.bin").write_bytes(b"d" * 1048576)
+
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_roms": [str(roms_a), str(roms_b)],
+        },
+        "playlists": [
+            {"name": "Nintendo - NES.lpl", "src_folder": "NES", "dest_folder": "NES"},
+            {
+                "name": "Sony - PlayStation.lpl",
+                "src_folder": "PSX",
+                "dest_folder": "PSX",
+                "src_whitelist": r"\.(m3u|cue)$",
+                "src_blacklist": r"\.bin$",
+                "disabled": True,
+            },
+        ],
+    }
+
+    with patch("retrosync.toml.load", return_value=fake_config):
+        output = run_cli_tool(
+            [
+                "retrosync.py",
+                "--playlist-list",
+                "--config-file=ignored.conf",
+            ]
+        )
+
+    assert "Configured Playlists" in output
+    assert "Nintendo - NES" in output
+    assert "1" in output
+    assert "0.00 GB" in output
+    assert "Sony - PlayStation" in output
+    assert "🛑" in output
+    assert "0.00 GB" in output
+
+
+def test_playlist_list_does_not_create_transport():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_roms": ["tests/assets/roms"],
+        },
+        "playlists": [
+            {"name": "Nintendo - NES.lpl", "src_folder": "nes", "dest_folder": "nes"},
+        ],
+    }
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory") as factory_mock,
+    ):
+        output = run_cli_tool(
+            [
+                "retrosync.py",
+                "--playlist-list",
+                "--config-file=ignored.conf",
+            ]
+        )
+
+    factory_mock.assert_not_called()
+    assert "Nintendo - NES" in output
