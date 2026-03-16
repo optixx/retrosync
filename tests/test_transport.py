@@ -279,13 +279,13 @@ def test_normalize_transport_config_includes_webdav_settings():
     config = {
         "default": {"transport": "webdav"},
         "webdav": {
-            "host": "http://127.0.0.1:8080",
+            "url": "http://127.0.0.1:8080",
             "username": "alice",
             "password": "secret",
         },
     }
     default = normalize_transport_config(config)
-    assert default["host"] == "http://127.0.0.1:8080"
+    assert default["url"] == "http://127.0.0.1:8080"
     assert default["username"] == "alice"
     assert default["password"] == "secret"
 
@@ -299,14 +299,14 @@ def test_normalize_transport_config_reads_ssh_and_webdav_sections():
             "password": "secret",
         },
         "webdav": {
-            "host": "https://dav.local",
+            "url": "https://dav.local",
             "username": "dav-user",
             "password": "dav-pass",
         },
     }
     default = normalize_transport_config(config)
     assert default["hostname"] == "steamdeck"
-    assert "host" not in default
+    assert "url" not in default
     assert default["username"] == "deck"
     assert default["password"] == "secret"
 
@@ -324,13 +324,13 @@ def test_normalize_transport_config_keeps_remote_fallback():
     assert default["hostname"] == "legacy-host"
     assert default["username"] == ""
     assert default["password"] == ""
-    assert default["host"] == ""
+    assert default["url"] == ""
 
 
 def test_transport_webdav_reads_config():
     default = {
         "transport": "webdav",
-        "host": "dav.local:8080",
+        "url": "http://dav.local:8080",
         "username": "user",
         "password": "pass",
     }
@@ -340,21 +340,35 @@ def test_transport_webdav_reads_config():
     assert transport.password == "pass"
 
 
-def test_transport_webdav_requires_host():
+def test_transport_webdav_requires_url():
     default = {
         "transport": "webdav",
-        "host": "",
+        "url": "",
         "username": "",
         "password": "",
     }
-    with pytest.raises(TransportError, match="WebDAV transport requires \\[webdav\\].host"):
+    with pytest.raises(TransportError, match="WebDAV transport requires \\[webdav\\].url"):
+        TransportWebDAV(default, dry_run=True)
+
+
+def test_transport_webdav_requires_full_url():
+    default = {
+        "transport": "webdav",
+        "url": "dav.local:8080",
+        "username": "user",
+        "password": "pass",
+    }
+    with pytest.raises(
+        TransportError,
+        match="WebDAV transport requires \\[webdav\\].url to be a full http\\(s\\) URL",
+    ):
         TransportWebDAV(default, dry_run=True)
 
 
 def test_transport_webdav_request_401_retries_with_preemptive_basic_auth():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -380,7 +394,7 @@ def test_transport_webdav_request_401_retries_with_preemptive_basic_auth():
 def test_transport_webdav_request_rewinds_stream_body_before_retry():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -414,7 +428,7 @@ def test_transport_webdav_request_rewinds_stream_body_before_retry():
 def test_transport_webdav_request_401_raises_clear_message_after_retry():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -439,7 +453,7 @@ def test_transport_webdav_request_401_raises_clear_message_after_retry():
 def test_transport_webdav_request_401_without_credentials_raises_clear_message():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "",
         "password": "",
     }
@@ -459,7 +473,7 @@ def test_transport_webdav_request_401_without_credentials_raises_clear_message()
 def test_transport_webdav_request_network_errors_map_to_transport_error():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -473,7 +487,7 @@ def test_transport_webdav_request_network_errors_map_to_transport_error():
 def test_transport_webdav_ensure_dir_exists_uses_cache_after_first_create():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -493,7 +507,7 @@ def test_transport_webdav_ensure_dir_exists_uses_cache_after_first_create():
 def test_transport_webdav_ensure_dir_exists_skips_mkcol_when_server_path_exists():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -513,7 +527,7 @@ def test_transport_webdav_ensure_dir_exists_skips_mkcol_when_server_path_exists(
 def test_transport_webdav_mkcol_ignores_failure_if_path_already_exists():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -529,7 +543,7 @@ def test_transport_webdav_mkcol_ignores_failure_if_path_already_exists():
 def test_transport_webdav_mkcol_reraises_failure_when_path_missing():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -546,7 +560,7 @@ def test_transport_webdav_mkcol_reraises_failure_when_path_missing():
 def test_transport_webdav_path_exists_returns_false_only_for_404():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -563,7 +577,7 @@ def test_transport_webdav_path_exists_returns_false_only_for_404():
 def test_transport_webdav_path_exists_reraises_non_404_errors():
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
     }
@@ -587,7 +601,7 @@ def test_transport_webdav_parallel_copy_calls_callback_for_each_file(tmp_path):
 
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
         "webdav_max_workers": "2",
@@ -614,7 +628,7 @@ def test_transport_webdav_parallel_copy_keyboard_interrupt_maps_to_transport_err
 
     default = {
         "transport": "webdav",
-        "host": "http://dav.local",
+        "url": "http://dav.local",
         "username": "user",
         "password": "pass",
         "webdav_max_workers": "2",

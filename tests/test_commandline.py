@@ -119,7 +119,7 @@ def _minimal_transport_config(default_transport):
             "password": "ssh-pass",
         },
         "webdav": {
-            "host": "http://dav.local",
+            "url": "http://dav.local",
             "username": "dav-user",
             "password": "dav-pass",
         },
@@ -147,7 +147,7 @@ def test_transport_override_cli_sets_webdav_mode_for_factory():
 
     called_default, called_dry_run, called_force_transport = factory_mock.call_args[0]
     assert called_default["transport"] == "webdav"
-    assert called_default["host"] == "http://dav.local"
+    assert called_default["url"] == "http://dav.local"
     assert called_dry_run is True
     assert str(called_force_transport).lower() == "false"
 

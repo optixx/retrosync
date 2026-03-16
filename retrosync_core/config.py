@@ -13,7 +13,7 @@ class RuntimeConfigModel(BaseModel):
     hostname: str | None = None
     username: str | None = None
     password: str | None = None
-    host: str | None = None
+    url: str | None = None
     src_roms: list[str] = Field(default_factory=list)
     src_playlists: str | None = None
     src_bios: str | None = None
@@ -202,7 +202,7 @@ def normalize_transport_config(config, transport_override=None):
             default[item] = ""
 
     if default["transport"] == "webdav":
-        default["host"] = webdav.get("host", "")
+        default["url"] = webdav.get("url", "")
         default["username"] = webdav.get("username", "")
         default["password"] = webdav.get("password", "")
 
@@ -265,7 +265,7 @@ def validate_runtime_config(
         require_default("username", "SSH transport")
         require_default("password", "SSH transport")
     elif runtime.transport == "webdav":
-        require_default("host", "WebDAV transport")
+        require_default("url", "WebDAV transport")
 
     if do_sync_bios:
         require_default("src_bios", "--sync-bios")

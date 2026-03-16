@@ -75,7 +75,7 @@ password = "<password>"
 
 [webdav]
 # Required only for transport = "webdav"
-host = "http://192.168.1.200:8080"
+url = "http://192.168.1.200:8080"
 username = "ios-user"
 password = "<password>"
 
@@ -147,13 +147,14 @@ Use `transport = "webdav"` in `[default]` and provide credentials in `[webdav]`.
 transport = "webdav"
 
 [webdav]
-host = "http://your-webdav-host:port"
+url = "http://your-webdav-host:port"
 username = "your-user"
 password = "your-password"
 ```
 
 Notes:
-- `host` may include a base path, for example `http://host:8080/remote.php/dav/files/user`.
+- `url` must be a full `http://` or `https://` URL.
+- `url` may include a base path, for example `http://host:8080/remote.php/dav/files/user`.
 - Destination paths (`dest_*`) are interpreted as remote WebDAV paths.
 - If `dest_*` values expand to local home paths (for example `~/Sync/...`), Retrosync maps them to WebDAV-rooted paths (for example `/Sync/...`).
 

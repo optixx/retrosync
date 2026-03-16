@@ -303,10 +303,10 @@ class TransportWebDAV(TransportBase):
     def __init__(self, default, dry_run):
         self.default = default
         self.dry_run = dry_run
-        self.host = str(self.default.get("host", "")).strip()
+        self.url = str(self.default.get("url", "")).strip()
         self.username = str(self.default.get("username", "")).strip()
         self.password = str(self.default.get("password", ""))
-        self.base_url = self._normalize_base_url(self.host)
+        self.base_url = self._normalize_base_url(self.url)
         self._auth_header = self._build_auth_header()
         self._thread_local = threading.local()
         self._dir_lock = threading.Lock()
@@ -318,21 +318,22 @@ class TransportWebDAV(TransportBase):
         except (TypeError, ValueError):
             self.max_workers = self.DEFAULT_MAX_WORKERS
         logger.debug(
-            "TransportWebDAV::__ctor__: dry_run=%s host=%s username=%s max_workers=%s",
+            "TransportWebDAV::__ctor__: dry_run=%s url=%s username=%s max_workers=%s",
             self.dry_run,
             self.base_url,
             self.username,
             self.max_workers,
         )
         if not self.base_url:
-            raise TransportError("WebDAV transport requires [webdav].host in the config.")
+            raise TransportError("WebDAV transport requires [webdav].url in the config.")
 
-    def _normalize_base_url(self, host):
-        if not host:
+    def _normalize_base_url(self, url):
+        if not url:
             return ""
-        if not host.startswith(("http://", "https://")):
-            host = f"http://{host}"
-        return host.rstrip("/")
+        parsed = urllib.parse.urlparse(url)
+        if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+            raise TransportError("WebDAV transport requires [webdav].url to be a full http(s) URL.")
+        return url.rstrip("/")
 
     def _build_auth_header(self):
         if not self.username and not self.password:

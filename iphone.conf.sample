@@ -18,7 +18,7 @@ username = ""
 password = ""
 
 [webdav]
-host = ""
+url = "http://192.168.1.100"
 username = ""
 password = ""
 

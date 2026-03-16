@@ -36,12 +36,12 @@ def _base_playlists():
     ]
 
 
-def test_validate_runtime_config_requires_webdav_host():
+def test_validate_runtime_config_requires_webdav_url():
     default = _base_default()
     default["transport"] = "webdav"
-    default["host"] = ""
+    default["url"] = ""
 
-    with pytest.raises(ValueError, match="'host' is required for WebDAV transport"):
+    with pytest.raises(ValueError, match="'url' is required for WebDAV transport"):
         validate_runtime_config(
             default,
             _base_playlists(),
