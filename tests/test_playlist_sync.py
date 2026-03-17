@@ -487,7 +487,8 @@ def test_update_thumbnails_matches_remote_boxart_listing_with_alias(tmp_path):
     </body></html>
     """
 
-    def fake_urlopen(url, _timeout=30):
+    def fake_urlopen(url, timeout=30):
+        _ = timeout
         if url == "https://thumbnails.libretro.com/":
             return DummyResponse(root_html)
         if url == "https://thumbnails.libretro.com/The%203DO%20Company%20-%203DO/Named_Boxarts/":
@@ -645,7 +646,8 @@ def test_update_thumbnails_apply_downloads_assets_and_rewrites_label(tmp_path):
         "https://thumbnails.libretro.com/Nintendo%20-%20Test/Named_Snaps/Super%20Mario%20Bros.png": b"snap",
     }
 
-    def fake_urlopen(url, _timeout=30):
+    def fake_urlopen(url, timeout=30):
+        _ = timeout
         html_payloads = {
             "https://thumbnails.libretro.com/": root_html,
             "https://thumbnails.libretro.com/Nintendo%20-%20Test/Named_Boxarts/": boxart_html,
@@ -740,7 +742,8 @@ def test_update_thumbnails_reports_progress_for_search_and_apply(tmp_path):
     </body></html>
     """
 
-    def fake_urlopen(url, _timeout=30):
+    def fake_urlopen(url, timeout=30):
+        _ = timeout
         directory_payloads = {
             "https://thumbnails.libretro.com/": b'<html><body><a href="Nintendo%20-%20Test/">Nintendo - Test/</a></body></html>',
             "https://thumbnails.libretro.com/Nintendo%20-%20Test/Named_Boxarts/": html_payload,
