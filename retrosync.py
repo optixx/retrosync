@@ -38,6 +38,7 @@ from retrosync_core.jobs import (
     PlaylistUpdatecJob,
     RomSyncJob,
     SystemJob,
+    ThumbnailsUpdateJob,
     ThumbnailsSync,
 )
 from retrosync_core.paths import (
@@ -103,6 +104,7 @@ __all__ = [
     "PlaylistSyncJob",
     "PlaylistUpdateJob",
     "PlaylistUpdatecJob",
+    "ThumbnailsUpdateJob",
     "RuntimeConfigModel",
     "PlaylistConfigModel",
     "expand_config",
@@ -309,6 +311,30 @@ class CliRichReporter:
     help="Update local playlist files by scanning the ROM directories for results",
 )
 @click.option(
+    "--update-thumbnails",
+    "do_update_thumbnails",
+    is_flag=True,
+    help="Update local thumbnails for configured playlists",
+)
+@click.option(
+    "--apply",
+    "apply_changes",
+    is_flag=True,
+    help="Apply local changes for update-thumbnails by downloading assets and rewriting labels",
+)
+@click.option(
+    "--refresh-thumbnail-cache",
+    "refresh_thumbnail_cache",
+    is_flag=True,
+    help="Ignore cached remote thumbnail directory listings and fetch fresh ones",
+)
+@click.option(
+    "--no-thumbnail-cache",
+    "no_thumbnail_cache",
+    is_flag=True,
+    help="Disable reading and writing the local thumbnail directory cache for this run",
+)
+@click.option(
     "--playlist-list",
     "do_playlist_list",
     is_flag=True,
@@ -366,6 +392,10 @@ def main(
     do_sync_thumbails,
     do_sync_roms,
     do_update_playlists,
+    do_update_thumbnails,
+    apply_changes,
+    refresh_thumbnail_cache,
+    no_thumbnail_cache,
     do_playlist_list,
     system_name,
     config_file,
@@ -396,7 +426,7 @@ def main(
     if do_all:
         do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_favorites = do_sync_thumbails = (
             do_update_playlists
-        ) = True
+        ) = do_update_thumbnails = True
 
     if not any(
         [
@@ -406,6 +436,7 @@ def main(
             do_sync_favorites,
             do_sync_thumbails,
             do_update_playlists,
+            do_update_thumbnails,
             do_playlist_list,
         ]
     ):
@@ -420,28 +451,13 @@ def main(
         default = expand_config(
             normalize_transport_config(config, transport_override=normalized_transport_override)
         )
+        default["_update_thumbnails_apply"] = bool(apply_changes)
+        default["_refresh_thumbnail_cache"] = bool(refresh_thumbnail_cache)
+        default["_no_thumbnail_cache"] = bool(no_thumbnail_cache)
         playlists = normalize_playlists(config.get("playlists", []))
-        validate_runtime_config(
-            default,
-            playlists,
-            do_sync_playlists=do_sync_playlists,
-            do_sync_bios=do_sync_bios,
-            do_sync_favorites=do_sync_favorites,
-            do_sync_thumbnails=do_sync_thumbails,
-            do_sync_roms=do_sync_roms,
-            do_update_playlists=do_update_playlists,
-        )
     except ValueError as exc:
         print(str(exc))
         sys.exit(-1)
-
-    if do_playlist_list:
-        try:
-            list_playlists(default, playlists)
-        except ValueError as exc:
-            print(str(exc))
-            sys.exit(-1)
-        sys.exit(0)
 
     if system_name:
         matches = rank_system_matches(system_name, playlists)
@@ -463,6 +479,38 @@ def main(
                 sys.exit(-1)
             system_name = matches[selected - 1]
 
+    validation_playlists = playlists
+    if system_name:
+        validation_playlists = [p for p in playlists if p.get("name") == system_name]
+
+    try:
+        validate_runtime_config(
+            default,
+            validation_playlists,
+            do_sync_playlists=do_sync_playlists,
+            do_sync_bios=do_sync_bios,
+            do_sync_favorites=do_sync_favorites,
+            do_sync_thumbnails=do_sync_thumbails,
+            do_sync_roms=do_sync_roms,
+            do_update_playlists=do_update_playlists,
+            do_update_thumbnails=do_update_thumbnails,
+        )
+    except ValueError as exc:
+        print(str(exc))
+        sys.exit(-1)
+
+    if apply_changes and do_update_thumbnails and not default.get("src_thumbnails"):
+        print("[default] 'src_thumbnails' is required for --update-thumbnails --apply")
+        sys.exit(-1)
+
+    if do_playlist_list:
+        try:
+            list_playlists(default, playlists)
+        except ValueError as exc:
+            print(str(exc))
+            sys.exit(-1)
+        sys.exit(0)
+
     try:
         transport = TransportFactory(default, dry_run, force_transport)
         runner = SyncRunner(
@@ -476,6 +524,7 @@ def main(
                 thumbnails_sync=ThumbnailsSync,
                 playlist_sync_job=PlaylistSyncJob,
                 playlist_update_job=PlaylistUpdateJob,
+                thumbnails_update_job=ThumbnailsUpdateJob,
                 rom_sync_job=RomSyncJob,
             ),
         )
@@ -486,6 +535,7 @@ def main(
             do_sync_thumbnails=do_sync_thumbails,
             do_sync_roms=do_sync_roms,
             do_update_playlists=do_update_playlists,
+            do_update_thumbnails=do_update_thumbnails,
             dry_run=dry_run,
             do_debug=do_debug,
         )

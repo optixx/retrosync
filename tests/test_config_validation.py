@@ -51,6 +51,7 @@ def test_validate_runtime_config_requires_webdav_url():
             do_sync_thumbnails=False,
             do_sync_roms=False,
             do_update_playlists=False,
+            do_update_thumbnails=False,
         )
 
 
@@ -68,6 +69,7 @@ def test_validate_runtime_config_requires_sync_bios_paths():
             do_sync_thumbnails=False,
             do_sync_roms=False,
             do_update_playlists=False,
+            do_update_thumbnails=False,
         )
 
 
@@ -88,6 +90,7 @@ def test_validate_runtime_config_requires_playlist_core_fields_for_update():
             do_sync_thumbnails=False,
             do_sync_roms=False,
             do_update_playlists=True,
+            do_update_thumbnails=False,
         )
 
 
@@ -104,4 +107,23 @@ def test_validate_runtime_config_allows_sync_roms_with_empty_folder_names():
         do_sync_thumbnails=False,
         do_sync_roms=True,
         do_update_playlists=False,
+        do_update_thumbnails=False,
     )
+
+
+def test_validate_runtime_config_requires_playlist_source_for_update_thumbnails():
+    default = _base_default()
+    default["src_playlists"] = ""
+
+    with pytest.raises(ValueError, match="'src_playlists' is required for --update-thumbnails"):
+        validate_runtime_config(
+            default,
+            _base_playlists(),
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_favorites=False,
+            do_sync_thumbnails=False,
+            do_sync_roms=False,
+            do_update_playlists=False,
+            do_update_thumbnails=True,
+        )

@@ -111,9 +111,32 @@ def _cfg():
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_update_playlists=False,
+        do_update_thumbnails=False,
         dry_run=True,
         do_debug=False,
     )
+
+
+class DummySystemJob:
+    name = "Dummy System"
+    setup_calls = []
+    do_calls = []
+
+    def __init__(self, default, transport):
+        self.size = 1
+        self.transfer_bytes = 0
+        self.playlist_name = None
+
+    def setup(self, playlist):
+        self.playlist_name = playlist["name"]
+        type(self).setup_calls.append(self.playlist_name)
+
+    def do(self, callback=None, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise RuntimeError("cancelled")
+        type(self).do_calls.append(self.playlist_name)
+        if callback:
+            callback()
 
 
 def test_runner_respects_pre_cancelled_token():
@@ -200,3 +223,41 @@ def test_runner_emits_failed_event():
 
     assert sink.events[0].event_type == EventType.RUN_STARTED
     assert sink.events[-1].event_type == EventType.RUN_FAILED
+
+
+def test_runner_filters_update_thumbnails_to_selected_system():
+    DummySystemJob.setup_calls = []
+    DummySystemJob.do_calls = []
+    reporter = DummyReporter()
+    runner = SyncRunner(
+        default={},
+        playlists=[
+            {"name": "Sony - PlayStation.lpl", "src_folder": "psx", "dest_folder": "psx"},
+            {"name": "Nintendo - GameCube.lpl", "src_folder": "gc", "dest_folder": "gc"},
+        ],
+        transport=DummyTransport(),
+        reporter=reporter,
+        job_registry=JobRegistry(thumbnails_update_job=DummySystemJob),
+    )
+
+    runner.run(
+        SyncRunConfig(
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_favorites=False,
+            do_sync_thumbnails=False,
+            do_sync_roms=False,
+            do_update_playlists=False,
+            do_update_thumbnails=True,
+            dry_run=True,
+            do_debug=False,
+        ),
+        system_name="Sony - PlayStation.lpl",
+    )
+
+    assert DummySystemJob.setup_calls == [
+        "Sony - PlayStation.lpl",
+        "Sony - PlayStation.lpl",
+        "Sony - PlayStation.lpl",
+    ]
+    assert DummySystemJob.do_calls == ["Sony - PlayStation.lpl"]

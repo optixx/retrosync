@@ -5,3 +5,4 @@ steamdeck.conf
 iphone.conf
 ipad.conf
 *.code-workspace
+.cache/

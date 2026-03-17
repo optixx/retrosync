@@ -226,6 +226,7 @@ def validate_runtime_config(
     do_sync_thumbnails: bool,
     do_sync_roms: bool,
     do_update_playlists: bool,
+    do_update_thumbnails: bool,
 ):
     errors = []
     try:
@@ -282,7 +283,9 @@ def validate_runtime_config(
         require_playlist_attr("src_core_name", "--sync-favorites")
         require_playlist_attr("dest_folder", "--sync-favorites", allow_empty=True)
 
-    needs_system_jobs = do_sync_playlists or do_sync_roms or do_update_playlists
+    needs_system_jobs = (
+        do_sync_playlists or do_sync_roms or do_update_playlists or do_update_thumbnails
+    )
 
     if do_sync_thumbnails:
         require_default("src_thumbnails", "--sync-thumbnails")
@@ -314,6 +317,9 @@ def validate_runtime_config(
         require_default("src_cores_suffix", "--update-playlists")
         require_playlist_attr("src_core_path", "--update-playlists")
         require_playlist_attr("src_core_name", "--update-playlists")
+
+    if do_update_thumbnails:
+        require_default("src_playlists", "--update-thumbnails")
 
     if errors:
         raise ValueError("Invalid configuration:\n- " + "\n- ".join(errors))

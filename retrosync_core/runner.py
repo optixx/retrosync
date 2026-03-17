@@ -13,6 +13,7 @@ from .jobs import (
     PlaylistSyncJob,
     PlaylistUpdateJob,
     RomSyncJob,
+    ThumbnailsUpdateJob,
     ThumbnailsSync,
 )
 from .transports import TransportError
@@ -36,6 +37,7 @@ class SyncRunConfig:
     do_sync_thumbnails: bool
     do_sync_roms: bool
     do_update_playlists: bool
+    do_update_thumbnails: bool
     dry_run: bool = False
     do_debug: bool = False
 
@@ -47,6 +49,7 @@ class JobRegistry:
     thumbnails_sync: type = ThumbnailsSync
     playlist_sync_job: type = PlaylistSyncJob
     playlist_update_job: type = PlaylistUpdateJob
+    thumbnails_update_job: type = ThumbnailsUpdateJob
     rom_sync_job: type = RomSyncJob
 
 
@@ -129,6 +132,19 @@ class SyncRunner:
         self.event_sink = event_sink or NullEventSink()
         self.run_id = str(uuid.uuid4())
 
+    def _collect_deferred_messages(self, job, output_messages):
+        consume = getattr(job, "consume_deferred_messages", None)
+        if not callable(consume):
+            return
+        output_messages.extend(consume())
+
+    def _collect_final_deferred_messages(self, jobs, output_messages):
+        for job in jobs:
+            consume = getattr(job, "consume_final_deferred_messages", None)
+            if not callable(consume):
+                continue
+            output_messages.extend(consume())
+
     def _emit(self, event_type: EventType, **kwargs):
         event = SyncEvent(event_type=event_type, run_id=self.run_id, **kwargs)
         logger.debug(
@@ -152,6 +168,8 @@ class SyncRunner:
 
     def run(self, cfg: SyncRunConfig, *, system_name=None, cancel_token=None):
         cancel_token = cancel_token or CancelToken()
+        deferred_output_messages = []
+        final_deferred_output_messages = []
         jobs = []
         if cfg.do_sync_bios:
             jobs.append(self.job_registry.bios_sync(self.default, self.playlists, self.transport))
@@ -169,6 +187,11 @@ class SyncRunner:
         system_jobs = []
         if cfg.do_update_playlists:
             system_jobs.append(self.job_registry.playlist_update_job(self.default, self.transport))
+
+        if cfg.do_update_thumbnails:
+            system_jobs.append(
+                self.job_registry.thumbnails_update_job(self.default, self.transport)
+            )
 
         if cfg.do_sync_playlists:
             system_jobs.append(self.job_registry.playlist_sync_job(self.default, self.transport))
@@ -246,6 +269,7 @@ class SyncRunner:
                     else:
                         callback = None
                     job.do(callback=callback, cancel_check=cancel_check)
+                    self._collect_deferred_messages(job, deferred_output_messages)
                     self._raise_if_cancelled(cancel_token)
                     if not supports_per_file_progress:
                         self.reporter.advance_transport_file_progress(step=1)
@@ -289,7 +313,12 @@ class SyncRunner:
                 ),
             )
 
-            if cfg.do_update_playlists or cfg.do_sync_playlists or cfg.do_sync_roms:
+            if (
+                cfg.do_update_playlists
+                or cfg.do_update_thumbnails
+                or cfg.do_sync_playlists
+                or cfg.do_sync_roms
+            ):
                 for idx, key in enumerate(systems.keys()):
                     self._raise_if_cancelled(cancel_token)
                     name = systems[key]["name"]
@@ -368,6 +397,7 @@ class SyncRunner:
                             else:
                                 callback = None
                             job.do(callback=callback, cancel_check=cancel_check)
+                            self._collect_deferred_messages(job, deferred_output_messages)
                             self._raise_if_cancelled(cancel_token)
                             if not supports_per_file_progress:
                                 self.reporter.advance_system_steps(system_steps_task_id, advance=1)
@@ -435,6 +465,13 @@ class SyncRunner:
             raise SyncAbortError("Stopping workers...") from exc
         finally:
             self.reporter.finish()
+
+        for message in deferred_output_messages:
+            self.reporter.emit_summary(message.rstrip())
+
+        self._collect_final_deferred_messages(jobs + system_jobs, final_deferred_output_messages)
+        for message in final_deferred_output_messages:
+            self.reporter.emit_summary(message.rstrip())
 
         if cfg.dry_run:
             summary = (

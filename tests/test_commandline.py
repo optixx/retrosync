@@ -1,5 +1,6 @@
 import io
 from unittest.mock import patch, Mock
+from click.testing import CliRunner
 from retrosync import main
 
 
@@ -175,6 +176,165 @@ def test_transport_override_with_transport_unix_keeps_force_flag():
     assert called_default["transport"] == "ssh"
     assert called_default["hostname"] == "example-host"
     assert called_force_transport == "unix"
+
+
+def test_update_thumbnails_cli_sets_run_config_and_forwards_name_filter():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+        },
+        "playlists": [
+            {"name": "Sony - PlayStation.lpl", "src_folder": "psx", "dest_folder": "psx"},
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+        patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
+    ):
+        result = CliRunner().invoke(
+            main,
+            [
+                "--dry-run",
+                "--update-thumbnails",
+                "--name=psx",
+                "--yes",
+                "--config-file=ignored.conf",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert run_cfg.do_update_thumbnails is True
+    assert run_cfg.dry_run is True
+    assert fake_runner.run.call_args.kwargs["system_name"] == "Sony - PlayStation.lpl"
+
+
+def test_update_thumbnails_apply_requires_src_thumbnails():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+        },
+        "playlists": [
+            {"name": "Sony - PlayStation.lpl", "src_folder": "psx", "dest_folder": "psx"},
+        ],
+    }
+
+    with patch("retrosync.toml.load", return_value=fake_config):
+        result = CliRunner().invoke(
+            main,
+            [
+                "--update-thumbnails",
+                "--apply",
+                "--name=psx",
+                "--yes",
+                "--config-file=ignored.conf",
+            ],
+        )
+
+    assert result.exit_code == -1
+    assert "[default] 'src_thumbnails' is required for --update-thumbnails --apply" in result.output
+
+
+def test_update_thumbnails_cache_flags_are_forwarded_to_default_config():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+        },
+        "playlists": [
+            {"name": "Sony - PlayStation.lpl", "src_folder": "psx", "dest_folder": "psx"},
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+        patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
+    ):
+        result = CliRunner().invoke(
+            main,
+            [
+                "--dry-run",
+                "--update-thumbnails",
+                "--refresh-thumbnail-cache",
+                "--no-thumbnail-cache",
+                "--name=psx",
+                "--yes",
+                "--config-file=ignored.conf",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    forwarded_default = fake_runner_ctor.call_args.kwargs["default"]
+    assert forwarded_default["_refresh_thumbnail_cache"] is True
+    assert forwarded_default["_no_thumbnail_cache"] is True
+
+
+def test_targeted_update_playlists_ignores_unrelated_invalid_playlist_config():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
+        },
+        "playlists": [
+            {
+                "name": "Quake II.lpl",
+                "src_folder": "ID - Quake2",
+                "dest_folder": "quake2",
+                "src_core_path": "vitaquake2_libretro",
+                "src_core_name": "Quake II (vitaQuake 2)",
+            },
+            {
+                "name": "Quake III.lpl",
+                "src_folder": "ID - Quake3",
+                "dest_folder": "quake3",
+                "src_core_path": "",
+                "src_core_name": "Quake III",
+            },
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+        patch("retrosync.rank_system_matches", return_value=["Quake II.lpl", "Quake III.lpl"]),
+    ):
+        result = CliRunner().invoke(
+            main,
+            [
+                "--dry-run",
+                "--update-playlists",
+                "--update-thumbnails",
+                "--name=quake",
+                "--yes",
+                "--config-file=ignored.conf",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    assert fake_runner.run.call_args.kwargs["system_name"] == "Quake II.lpl"
 
 
 def test_rom_sync_advances_transport_file_progress_hooks():
