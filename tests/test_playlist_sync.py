@@ -1075,3 +1075,64 @@ def test_update_thumbnails_emits_final_coverage_summary_table(tmp_path):
     assert "80.0%" in messages[0]
     assert "Atari - Jaguar" in messages[0]
     assert "100.0%" in messages[0]
+
+
+def test_update_thumbnails_prefers_clean_title_over_noisy_variants(tmp_path):
+    default_config = {
+        "src_playlists": str(tmp_path),
+    }
+    playlist = {"name": "Sharp - X68000.lpl", "src_folder": "test", "dest_folder": "test"}
+    job = ThumbnailsUpdateJob(default_config, transport=Mock())
+    job.setup(playlist)
+    job.thumbnail_index = job.build_thumbnail_index_from_names(
+        [
+            "Cotton",
+            "Cotton (Demo)",
+            "Cotton (Set 1)",
+        ]
+    )
+
+    match = job.match_thumbnail_candidate("Cotton [FD].zip", "Cotton [FD]", allow_fuzzy=True)
+
+    assert match is not None
+    assert match["matched"] == "Cotton"
+
+
+def test_update_thumbnails_uses_system_title_equivalents_for_32x(tmp_path):
+    default_config = {
+        "src_playlists": str(tmp_path),
+    }
+    playlist = {"name": "Sega - 32X.lpl", "src_folder": "test", "dest_folder": "test"}
+    job = ThumbnailsUpdateJob(default_config, transport=Mock())
+    job.setup(playlist)
+    job.thumbnail_index = job.build_thumbnail_index_from_names(
+        [
+            "After Burner Complete (Japan, USA) (En)",
+            "Brutal - Above the Claw (USA)",
+            "Doom (Japan, USA) (En)",
+            "Pitfall - The Mayan Adventure (USA)",
+            "Stellar Assault (Japan)",
+        ]
+    )
+
+    assert job.match_thumbnail_candidate("After Burner 32X", "After Burner 32X", allow_fuzzy=True)[
+        "matched"
+    ] == ("After Burner Complete (Japan, USA) (En)")
+    assert (
+        job.match_thumbnail_candidate(
+            "Brutal Unleashed 32X", "Brutal Unleashed 32X", allow_fuzzy=True
+        )["matched"]
+        == "Brutal - Above the Claw (USA)"
+    )
+    assert job.match_thumbnail_candidate("Doom 32X", "Doom 32X", allow_fuzzy=True)["matched"] == (
+        "Doom (Japan, USA) (En)"
+    )
+    assert job.match_thumbnail_candidate("Pitfall 32X", "Pitfall 32X", allow_fuzzy=True)[
+        "matched"
+    ] == ("Pitfall - The Mayan Adventure (USA)")
+    assert (
+        job.match_thumbnail_candidate(
+            "Shadow Squadron 32X", "Shadow Squadron 32X", allow_fuzzy=True
+        )["matched"]
+        == "Stellar Assault (Japan)"
+    )

@@ -317,6 +317,23 @@ class PlaylistUpdateJob(SystemJob):
             "baseoa": "OpenArena",
         },
     }
+    GLOBAL_TITLE_EQUIVALENTS = {
+        "bubsy fractured furry tails": "bubsy in fractured furry tales",
+        "doom evil unleashed": "doom",
+        "double dragon v": "double dragon v shadow falls",
+        "flashback": "flashback quest for identity",
+        "nba jam tournament edition": "nba jam tournament edition",
+        "val disere skiing snowboarding": "val disere skiing and snowboarding",
+    }
+    SYSTEM_TITLE_EQUIVALENTS = {
+        "Sega - 32X": {
+            "after burner 32x": "after burner complete",
+            "brutal unleashed 32x": "brutal above the claw",
+            "doom 32x": "doom",
+            "pitfall 32x": "pitfall mayan adventure",
+            "shadow squadron 32x": "stellar assault",
+        }
+    }
 
     def setup(self, playlist):
         self.playlist = playlist
@@ -393,14 +410,11 @@ class PlaylistUpdateJob(SystemJob):
         canonical = re.sub(r"\bf\s*14\b", "f14", canonical)
         canonical = re.sub(r"\buh\s*ix\b", "uhix", canonical)
         canonical = re.sub(r"\s+", " ", canonical).strip()
-        return {
-            "bubsy fractured furry tails": "bubsy in fractured furry tales",
-            "doom evil unleashed": "doom",
-            "double dragon v": "double dragon v shadow falls",
-            "flashback": "flashback quest for identity",
-            "nba jam tournament edition": "nba jam tournament edition",
-            "val disere skiing snowboarding": "val disere skiing and snowboarding",
-        }.get(canonical, canonical)
+        canonical = self.GLOBAL_TITLE_EQUIVALENTS.get(canonical, canonical)
+        playlist = getattr(self, "playlist", {}) or {}
+        system_name = Path(playlist.get("name", "")).stem
+        system_equivalents = self.SYSTEM_TITLE_EQUIVALENTS.get(system_name, {})
+        return system_equivalents.get(canonical, canonical)
 
     def _extract_region_tokens(self, name):
         tokens = set()
@@ -490,6 +504,26 @@ class PlaylistUpdateJob(SystemJob):
             return 2
         return 1
 
+    def _metadata_penalty(self, name):
+        lowered = name.lower()
+        penalty = (len(re.findall(r"\([^)]*\)", name)) + len(re.findall(r"\[[^\]]*\]", name))) * 3
+        for marker, weight in {
+            "set ": 8,
+            "alt": 8,
+            "demo": 12,
+            "hack": 15,
+            "patched": 10,
+            "patch": 8,
+            "logo": 8,
+            "with ": 6,
+            "freeware": 12,
+            "sample": 10,
+            "test": 8,
+        }.items():
+            if marker in lowered:
+                penalty += weight
+        return penalty
+
     def _candidate_group_key(self, features):
         numeric_tail = tuple(sorted(token for token in features.numeric_tokens if len(token) >= 3))
         return (
@@ -519,6 +553,10 @@ class PlaylistUpdateJob(SystemJob):
         if challenger[6] < current[6]:
             return challenger
         if challenger[6] > current[6]:
+            return current
+        if challenger[7] < current[7]:
+            return challenger
+        if challenger[7] > current[7]:
             return current
         if challenger[1] < current[1]:
             return challenger
@@ -650,6 +688,7 @@ class PlaylistUpdateJob(SystemJob):
             "score_value": score,
             "release_rank": self._release_rank(target.raw),
             "region_priority": self._region_priority(target.region_tokens),
+            "metadata_penalty": self._metadata_penalty(target.raw),
         }
 
     def match_thumbnail_candidate(self, stem, default_label, *, allow_fuzzy=False):
@@ -679,6 +718,7 @@ class PlaylistUpdateJob(SystemJob):
                     group_key,
                     scored["release_rank"],
                     scored["region_priority"],
+                    scored["metadata_penalty"],
                 )
                 preferred = self._select_best_with_tiebreak(best, item)
                 if preferred is item:
@@ -721,6 +761,19 @@ class PlaylistUpdateJob(SystemJob):
                     second_region_priority = second_best[6] if second_best is not None else None
                     if second_best is None or best_region_priority < second_region_priority:
                         pass
+                    elif best_region_priority == second_region_priority:
+                        best_metadata_penalty = best[7]
+                        second_metadata_penalty = (
+                            second_best[7] if second_best is not None else None
+                        )
+                        if (
+                            second_best is None
+                            or second_metadata_penalty is None
+                            or best_metadata_penalty < second_metadata_penalty
+                        ):
+                            pass
+                        else:
+                            return None
                     else:
                         return None
                 else:
