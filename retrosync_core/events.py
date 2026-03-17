@@ -1,10 +1,10 @@
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 import time
 from typing import Any, Protocol
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     RUN_STARTED = "run_started"
     RUN_FINISHED = "run_finished"
     RUN_CANCELLED = "run_cancelled"
