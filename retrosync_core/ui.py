@@ -33,7 +33,7 @@ transport_status_progress = Progress(
 
 transport_file_progress = Progress(
     TextColumn("  "),
-    TextColumn("[bold green]File Upload"),
+    TextColumn("[bold green]Progress"),
     BarColumn(),
     TextColumn("{task.completed}/{task.total}"),
 )
