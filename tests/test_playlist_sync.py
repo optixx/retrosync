@@ -813,6 +813,32 @@ def test_update_thumbnails_prefers_plain_retail_and_region_priority_when_source_
     assert match["match_type"] == "normalized"
 
 
+def test_update_thumbnails_uses_unambiguous_direct_index_match_without_full_scan():
+    job = ThumbnailsUpdateJob({"src_playlists": "/tmp"}, transport=Mock())
+    job.thumbnail_index = job.build_thumbnail_index_from_names(["Rayman (USA)"])
+    job._score_title_pair = Mock(side_effect=AssertionError("full scan should not run"))
+
+    match = job.match_thumbnail_candidate("Rayman", "Rayman (USA)", allow_fuzzy=True)
+
+    assert match["matched"] == "Rayman (USA)"
+    assert match["match_type"] == "exact"
+
+
+def test_update_thumbnails_keeps_full_scan_for_ambiguous_direct_index_matches():
+    job = ThumbnailsUpdateJob({"src_playlists": "/tmp"}, transport=Mock())
+    job.thumbnail_index = job.build_thumbnail_index_from_names(
+        [
+            "Rayman (USA)",
+            "Rayman (USA) (Rev 1)",
+        ]
+    )
+
+    match = job.match_thumbnail_candidate("Rayman", "Rayman", allow_fuzzy=True)
+
+    assert match["matched"] == "Rayman (USA)"
+    assert match["match_type"] == "normalized"
+
+
 def test_update_thumbnails_uses_local_directory_cache_across_job_instances(tmp_path):
     cache_dir = tmp_path / ".cache" / "retrosync" / "thumbnail-index"
     default_config = {

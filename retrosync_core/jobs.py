@@ -691,7 +691,95 @@ class PlaylistUpdateJob(SystemJob):
             "metadata_penalty": self._metadata_penalty(target.raw),
         }
 
-    def match_thumbnail_candidate(self, stem, default_label, *, allow_fuzzy=False):
+    def _build_match_result(self, thumb_name, candidate, target_features, score_value, match_type):
+        return {
+            "matched": thumb_name,
+            "match_type": match_type,
+            "score": 1.0 if score_value >= 80 else round(min(score_value / 80, 1.0), 3),
+            "candidate": candidate,
+            "url": self.thumbnail_index["urls"].get(thumb_name),
+            "_target_features": target_features,
+            "_source_features": None,
+            "_score_value": score_value,
+            "_release_rank": self._release_rank(target_features.raw),
+            "_region_priority": self._region_priority(target_features.region_tokens),
+            "_metadata_penalty": self._metadata_penalty(target_features.raw),
+        }
+
+    def _fast_index_match_for_candidate(self, candidate, source_features):
+        index = self.thumbnail_index
+        exact_match = index["exact"].get(source_features.exact)
+        if exact_match:
+            target_features = index["features"][exact_match]
+            return self._build_match_result(exact_match, candidate, target_features, 120, "exact")
+
+        for key_name, match_type, score_value in [
+            ("normalized", "normalized", 100),
+            ("relaxed", "relaxed", 90),
+            ("canonical", "canonical", 85),
+        ]:
+            lookup_key = getattr(source_features, key_name)
+            if not lookup_key:
+                continue
+            matches = index[key_name].get(lookup_key)
+            if not matches or len(matches) != 1:
+                continue
+            thumb_name = next(iter(matches))
+            target_features = index["features"][thumb_name]
+            if (
+                key_name == "normalized"
+                and source_features.region_tokens
+                and target_features.region_tokens
+            ):
+                if source_features.region_tokens & target_features.region_tokens:
+                    return self._build_match_result(
+                        thumb_name,
+                        candidate,
+                        target_features,
+                        115,
+                        "normalized-region",
+                    )
+                continue
+            if key_name in {"relaxed", "canonical"} and source_features.region_tokens:
+                if target_features.region_tokens:
+                    if source_features.region_tokens & target_features.region_tokens:
+                        return self._build_match_result(
+                            thumb_name,
+                            candidate,
+                            target_features,
+                            score_value + 15,
+                            f"{match_type}-region",
+                        )
+                    continue
+            return self._build_match_result(
+                thumb_name, candidate, target_features, score_value, match_type
+            )
+
+        return None
+
+    def _cleanup_match_result(self, result):
+        if result is None:
+            return None
+        cleaned = dict(result)
+        for key in [
+            "_target_features",
+            "_source_features",
+            "_score_value",
+            "_release_rank",
+            "_region_priority",
+            "_metadata_penalty",
+        ]:
+            cleaned.pop(key, None)
+        return cleaned
+
+    def match_thumbnail_candidate(
+        self,
+        stem,
+        default_label,
+        *,
+        allow_fuzzy=False,
+        source_feature_map=None,
+    ):
         best = None
         second_best = None
         best_group = None
@@ -701,7 +789,16 @@ class PlaylistUpdateJob(SystemJob):
                 seen_candidates.append(candidate)
 
         for candidate in seen_candidates:
-            source_features = self.parse_title_features(candidate)
+            if source_feature_map and candidate in source_feature_map:
+                source_features = source_feature_map[candidate]
+            else:
+                source_features = self.parse_title_features(candidate)
+
+            fast_match = self._fast_index_match_for_candidate(candidate, source_features)
+            if fast_match is not None:
+                fast_match["_source_features"] = source_features
+                return self._cleanup_match_result(fast_match)
+
             for thumb_name in self.thumbnail_index["names"]:
                 target_features = self.thumbnail_index["features"][thumb_name]
                 scored = self._score_title_pair(source_features, target_features)
@@ -755,7 +852,11 @@ class PlaylistUpdateJob(SystemJob):
                         if item and item[1] == tied_revision_candidates[0]
                     )
             elif best_release_rank == second_release_rank:
-                source_regions = self.parse_title_features(best[2]).region_tokens
+                source_regions = (
+                    source_feature_map.get(best[2]).region_tokens
+                    if source_feature_map and best[2] in source_feature_map
+                    else self.parse_title_features(best[2]).region_tokens
+                )
                 if not source_regions:
                     best_region_priority = best[6]
                     second_region_priority = second_best[6] if second_best is not None else None
@@ -1314,7 +1415,15 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
             rom_path = item.get("path", "")
             stem = Path(rom_path.split("#")[0]).stem
             label = item.get("label", stem)
-            match = self.match_thumbnail_candidate(stem, label, allow_fuzzy=True)
+            source_feature_map = {label: self.parse_title_features(label)}
+            if stem != label:
+                source_feature_map[stem] = self.parse_title_features(stem)
+            match = self.match_thumbnail_candidate(
+                stem,
+                label,
+                allow_fuzzy=True,
+                source_feature_map=source_feature_map,
+            )
             matched_name = match["matched"] if match else ""
             rows.append(
                 {
