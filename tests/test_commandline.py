@@ -1,5 +1,5 @@
 import io
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
 from click.testing import CliRunner
 from retrosync import main
 
@@ -21,6 +21,15 @@ def test_help():
 def test_no_args_prints_help():
     output = run_cli_tool(["retrosync.py"])
     assert "Usage: retrosync.py" in output
+
+
+def test_gui_flag_launches_gui():
+    with patch("retrosync.launch_gui") as launch_gui:
+        result = CliRunner().invoke(main, ["--gui"])
+
+    assert result.exit_code == 0, result.output
+    launch_gui.assert_called_once_with()
+    assert "Usage: " not in result.output
 
 
 def test_prompt():

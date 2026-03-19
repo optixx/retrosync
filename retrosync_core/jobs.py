@@ -225,6 +225,9 @@ class SystemJob(JobBase):
             raise AssertionError("No source ROM directories configured")
         return roots[0]
 
+    def build_preview_rows(self):
+        return []
+
 
 class RomSyncJob(SystemJob):
     name = "Sync ROMs"
@@ -986,6 +989,53 @@ class PlaylistUpdateJob(SystemJob):
                 name_map[game.attrib["name"]] = title
         return name_map
 
+    def _iter_candidate_files(self, src_rom_dir):
+        files = glob.glob(str(src_rom_dir / "*"))
+        files.sort()
+
+        file_list = []
+        for file in files:
+            if Path(file).is_dir():
+                file_list.extend(glob.glob(str(Path(file) / "*")))
+            else:
+                file_list.append(file)
+        return file_list
+
+    def build_preview_rows(self):
+        name = self.playlist.get("name")
+        local = Path(self.default.get("src_playlists")) / name
+        src_rom_dir = self.get_primary_src_rom_root() / self.playlist.get("src_folder")
+
+        whitelist = self.playlist.get("src_whitelist", False)
+        blacklist = self.playlist.get("src_blacklist", False)
+        self.name_map = self.build_file_map(src_rom_dir, self.playlist.get("src_dat_file", ""))
+        self.thumbnail_index = self.build_thumbnail_index()
+        self.thumbnail_match_count = 0
+        self.thumbnail_miss_count = 0
+
+        rows = []
+        for file in self._iter_candidate_files(src_rom_dir):
+            if blacklist and re.compile(blacklist).search(file):
+                continue
+
+            include = True
+            if whitelist:
+                include = bool(re.compile(whitelist).search(file))
+            if not include:
+                continue
+
+            item = self.make_item(local, file)
+            rows.append(
+                {
+                    "rom": Path(file).name,
+                    "path": str(file),
+                    "label": item.get("label", ""),
+                    "playlist": str(local),
+                    "thumbnail_match": item.get("label", "") != Path(file).stem,
+                }
+            )
+        return rows
+
     def do(self, callback=None, cancel_check=None):
         name = self.playlist.get("name")
         logger.debug(f"migrate_playlist: name={name}")
@@ -1516,6 +1566,52 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
 
         if changed and not self.transport.dry_run:
             playlist_path.write_text(json.dumps(playlist_doc, indent=2), encoding="utf-8")
+
+    def build_apply_preview_rows(self, rows):
+        preview_rows = []
+        for row in rows:
+            if not self._should_apply_row(row):
+                continue
+            matched_name = row["thumbnail"]
+            system_name = Path(self.playlist.get("name", "")).stem
+            for folder_key, folder_name in self.ASSET_FOLDERS.items():
+                asset_info = row["asset_urls"].get(folder_key)
+                if not asset_info:
+                    continue
+                if self._has_local_asset(matched_name, folder_name):
+                    continue
+                src_thumbnails = self.default.get("src_thumbnails")
+                asset_dir = (
+                    Path(src_thumbnails) / system_name / folder_name if src_thumbnails else Path("")
+                )
+                ext = asset_info.get("ext", ".png")
+                preview_rows.append(
+                    {
+                        "operation": "download",
+                        "rom": row["rom"],
+                        "label": row["label"],
+                        "thumbnail": matched_name,
+                        "source": asset_info["url"],
+                        "destination": str(asset_dir / f"{matched_name}{ext}")
+                        if src_thumbnails
+                        else "",
+                        "details": f"Download {folder_key} asset for matched thumbnail.",
+                    }
+                )
+            if row["label"] != matched_name:
+                playlist_path = Path(self.default.get("src_playlists")) / self.playlist.get("name")
+                preview_rows.append(
+                    {
+                        "operation": "rewrite",
+                        "rom": row["rom"],
+                        "label": row["label"],
+                        "thumbnail": matched_name,
+                        "source": str(playlist_path),
+                        "destination": str(playlist_path),
+                        "details": f"Rewrite playlist label from '{row['label']}' to '{matched_name}'.",
+                    }
+                )
+        return preview_rows
 
     def do(self, callback=None, cancel_check=None):
         if cancel_check and cancel_check():

@@ -47,7 +47,7 @@ from retrosync_core.paths import (
     normalize_webdav_remote_path,
     retroarch_derived_paths,
 )
-from retrosync_core.runner import JobRegistry, SyncAbortError, SyncRunConfig, SyncRunner
+from retrosync_core.runner import JobRegistry, SyncAbortError, SyncRunner
 from retrosync_core.transports import (
     GLOBAL_EXCLUDE_PATTERNS,
     TransportBase,
@@ -62,6 +62,14 @@ from retrosync_core.transports import (
     TransportWebDAV,
     TransportWindowsBase,
     get_transport_mode,
+)
+from retrosync_gui import launch_gui
+from retrosync_app.services import (
+    build_run_config,
+    build_runner,
+    filter_playlists,
+    load_runtime_context,
+    validate_run_request,
 )
 from retrosync_core.ui import (
     advance_transport_file_progress,
@@ -270,6 +278,12 @@ class CliRichReporter:
 
 @click.command()
 @click.option(
+    "--gui",
+    "do_gui",
+    is_flag=True,
+    help="Launch the GUI",
+)
+@click.option(
     "--all",
     "-a",
     "do_all",
@@ -385,6 +399,7 @@ class CliRichReporter:
 )
 @click.option("--yes", is_flag=True, help="Skip prompt inputs by saying yes to everything")
 def main(
+    do_gui,
     do_all,
     do_sync_playlists,
     do_sync_bios,
@@ -406,6 +421,10 @@ def main(
     yes,
 ):
     global logger
+
+    if do_gui:
+        launch_gui()
+        sys.exit(0)
 
     if do_debug:
         logging.basicConfig(
@@ -444,17 +463,16 @@ def main(
         sys.exit(0)
 
     try:
-        config = toml.load(config_file)
-        normalized_transport_override = (
-            str(transport_override).strip().lower() if transport_override is not None else None
+        context = load_runtime_context(
+            config_loader=toml.load,
+            config_file=config_file,
+            transport_override=transport_override,
+            apply_changes=apply_changes,
+            refresh_thumbnail_cache=refresh_thumbnail_cache,
+            no_thumbnail_cache=no_thumbnail_cache,
         )
-        default = expand_config(
-            normalize_transport_config(config, transport_override=normalized_transport_override)
-        )
-        default["_update_thumbnails_apply"] = bool(apply_changes)
-        default["_refresh_thumbnail_cache"] = bool(refresh_thumbnail_cache)
-        default["_no_thumbnail_cache"] = bool(no_thumbnail_cache)
-        playlists = normalize_playlists(config.get("playlists", []))
+        default = context.default
+        playlists = context.playlists
     except ValueError as exc:
         print(str(exc))
         sys.exit(-1)
@@ -479,14 +497,10 @@ def main(
                 sys.exit(-1)
             system_name = matches[selected - 1]
 
-    validation_playlists = playlists
-    if system_name:
-        validation_playlists = [p for p in playlists if p.get("name") == system_name]
+    validation_playlists = filter_playlists(playlists, system_name=system_name)
 
     try:
-        validate_runtime_config(
-            default,
-            validation_playlists,
+        run_cfg = build_run_config(
             do_sync_playlists=do_sync_playlists,
             do_sync_bios=do_sync_bios,
             do_sync_favorites=do_sync_favorites,
@@ -494,13 +508,17 @@ def main(
             do_sync_roms=do_sync_roms,
             do_update_playlists=do_update_playlists,
             do_update_thumbnails=do_update_thumbnails,
+            dry_run=dry_run,
+            do_debug=do_debug,
+        )
+        validate_run_request(
+            default,
+            validation_playlists,
+            run_cfg,
+            apply_changes=apply_changes,
         )
     except ValueError as exc:
         print(str(exc))
-        sys.exit(-1)
-
-    if apply_changes and do_update_thumbnails and not default.get("src_thumbnails"):
-        print("[default] 'src_thumbnails' is required for --update-thumbnails --apply")
         sys.exit(-1)
 
     if do_playlist_list:
@@ -512,11 +530,11 @@ def main(
         sys.exit(0)
 
     try:
-        transport = TransportFactory(default, dry_run, force_transport)
-        runner = SyncRunner(
+        runner = build_runner(
             default=default,
             playlists=playlists,
-            transport=transport,
+            dry_run=dry_run,
+            force_transport=force_transport,
             reporter=CliRichReporter(),
             job_registry=JobRegistry(
                 bios_sync=BiosSync,
@@ -527,17 +545,8 @@ def main(
                 thumbnails_update_job=ThumbnailsUpdateJob,
                 rom_sync_job=RomSyncJob,
             ),
-        )
-        run_cfg = SyncRunConfig(
-            do_sync_playlists=do_sync_playlists,
-            do_sync_bios=do_sync_bios,
-            do_sync_favorites=do_sync_favorites,
-            do_sync_thumbnails=do_sync_thumbails,
-            do_sync_roms=do_sync_roms,
-            do_update_playlists=do_update_playlists,
-            do_update_thumbnails=do_update_thumbnails,
-            dry_run=dry_run,
-            do_debug=do_debug,
+            transport_factory=TransportFactory,
+            runner_factory=SyncRunner,
         )
         runner.run(run_cfg, system_name=system_name)
     except (SyncAbortError, TransportError) as exc:
