@@ -1,249 +1,43 @@
-![Supported Python Versions](https://img.shields.io/pypi/pyversions/rich/13.2.0)
-
-
 ![Logo](https://github.com/optixx/retrosync/raw/main/assets/img/logo.png)
 
-Retrosync is a Python script to sync [Retroarch](https://retroarch.com) playlists and ROMs from your desktop computer to your Steam Deck or iOS based devices.
+# Retrosync
 
-## Features syncing to Steamdeck
-1. Synchronize via SSH RetroArch playlists, favorites from Desktop to Steam Deck
-2. Synchronize via SSH ROMs, Bios files and thumbnail
+Retrosync is a Python CLI tool for syncing [RetroArch](https://retroarch.com/) content from your desktop to other devices like a Steam Deck or iOS.
 
-## Features syncing to iOS devices
-1. Synchronize directly from Desktop to iOS via WebDAV (`transport = "webdav"`)
-2. Synchronize RetroArch playlists, favorites, ROMs, BIOS files and thumbnails
-3. Optional fallback: use `transport = "filesystem"` to prepare files locally for Finder/iCloud/manual transfer
+It handles playlists, ROMs, BIOS files, favorites, and thumbnails — and can also rebuild your local playlists from your ROM folders.
 
-## Features for all target devices
-1. Update and recreate local playlists by scanning local folders
-2. Create local m3u files using detection and normalizing regular expressions
-3. Support for XML DAT archives
-4. Configure your local and remote cores according to each system
+---
 
-![Demo](https://github.com/optixx/retrosync/raw/main/assets/img/demo.gif)
+## Features
 
-## Compatibility
+### Sync
+- Playlists
+- Favorites
+- ROMs
+- BIOS files
+- Thumbnails
 
- Retrosync functions with macOS, Linux, and Windows, relying on previously installed tools such as Secure Shell (SSH) and Rsync, or utilizing pure Python Secure Shell implementations. This means that you need to enable SSH on your Steam Deck if you have not done so already; you can follow this guide for [instructions](https://shendrick.net/Gaming/2022/05/30/sshonsteamdeck.html).
+### Transport support
+- `ssh` → Steam Deck / Linux targets
+- `webdav` → iOS / remote storage
+- `filesystem` → local export for manual transfer
 
-The primary distinction between the two target device groups is transport: Steam Deck typically uses direct SSH sync (`transport = "ssh"`), while iOS uses direct WebDAV sync (`transport = "webdav"`) using credentials in the `[webdav]` section. If preferred, iOS can still use filesystem export for later transfer via Finder/iCloud.
+### Local tooling
+- Rebuild playlists by scanning ROM folders
+- Generate `.m3u` files for multi-disk games
+- Regex-based filtering and normalization
+- Thumbnail matching + download workflow
 
-LocalSend transport support has been removed.
+---
 
+## Installation
 
-
-
-
-## Installing
-
-Install the dependencies using the included Makefile, that utilize [UV](https://github.com/astral-sh/uv) to install the dependencies into a virtualenv.
-
-```sh
-make install
-```
-
-## Configuration
-
- By default, the `steamdeck.toml` configuration file is employed. You can alter the configuration file by utilizing the command switch `--config-file` to specify an alternate filename.
-
-In this sample configuration, a setup is provided for your local desktop's Retroarch-related files and your local ROM locations, as well as for the remote side on your Steam Deck. The appearance of these details may vary slightly on your Steam Deck, depending on how you installed Retroarch. For instance, in this scenario, Retroarch was installed through Emudeck (<https://www.emudeck.com/>) using Flatpak (<https://flatpak.org/>)).
-```toml
-
-[default]
-# Select transport mode: filesystem, ssh, or webdav.
-transport = "ssh"
-
-src_retroarch_base = "~/Library/Application Support/RetroArch"
-src_roms = ["~/Documents/Roms", "~/Library/CloudStorage/Dropbox/Software/Roms"]
-src_flavor = "apple"
-
-# Provide the specific location where to sync data to
-dest_retroarch_base = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch"
-# Optional override: if omitted, dest_bios defaults to "<dest_retroarch_base>/system"
-dest_bios = "/home/deck/Emulation/bios"
-dest_roms = "/home/deck/Emulation/roms"
-
-# Actual Destinations on the Target Device
-target_roms =  "/home/deck/Emulation/roms"
-target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
-target_flavor = "linux"
-
-[ssh]
-hostname = "192.168.1.100"
-username = "deck"
-password = "<password>"
-
-[webdav]
-# Required only for transport = "webdav"
-url = "http://192.168.1.200:8080"
-username = "ios-user"
-password = "<password>"
-
-
-[[playlists]]
-name = "Atari - 2600.lpl"
-src_folder = "Atari - 2600"
-dest_folder = "atari2600"
-src_core_path = "stella_libretro"
-src_core_name = "Atari - 2600 (Stella)"
-
-[[playlists]]
-name = "Atari - 7800.lpl"
-src_folder = "Atari - 7800"
-dest_folder = "atari7800"
-src_core_path = "prosystem_libretro"
-src_core_name = "Atari - 7800 (ProSystem)"
-
-[[playlists]]
-name = "Nintendo - Game Boy Advance.lpl"
-src_folder = "Nintendo - Game Boy Advance"
-# dest_folder omitted -> defaults to src_folder
-src_core_path = "mgba_libretro"
-src_core_name = "Nintendo - Game Boy Advance (mGBA)"
-
-[[playlists]]
-name = "Nintendo - GameCube.lpl"
-src_folder = "Nintendo - GameCube"
-# dest_folder omitted -> defaults to src_folder
-src_core_path = "dolphin_libretro"
-src_core_name = "Nintendo - GameCube / Wii (Dolphin)"
-
-[[playlists]]
-name = "Sharp - X68000.lpl"
-src_folder = "Sharp - X68000"
-# Make sure to include all zip files matching the "FD" pattern
-src_whitelist = '.*FD.*\.zip$'
-# Exclude all files that hint hard disk images
-src_blacklist = '.*HD.*\.zip$'
-dest_folder = "x68000"
-src_core_path = "px68k_libretro"
-src_core_name = "Sharp - X68000 (PX68k)"
-
-[[playlists]]
-name = "Commodore - Amiga.lpl"
-src_folder = "Commodore - Amiga"
-# Make sure to include all m3u list
-src_whitelist = '\.m3u$'
-# Don't add single adf images
-src_blacklist = '\.adf$'
-# Create fresh m3u files while updating playlists
-src_create_m3u = true
-# Only include adf images in m3u files
-src_m3u_whitelist = '\.adf$'
-# Normalizing pattern for files like "Agony (Disk 1 of 3).adf"
-src_m3u_pattern = '(.*)(\(Disk \d of \d\)).*\.adf'
-dest_folder = "amiga"
-src_core_path = "puae_libretro"
-src_core_name = "Commodore - Amiga (PUAE)"
-
-```
-
-### WebDAV Configuration
-
-Use `transport = "webdav"` in `[default]` and provide credentials in `[webdav]`.
-
-```toml
-[default]
-transport = "webdav"
-
-[webdav]
-url = "http://your-webdav-host:port"
-username = "your-user"
-password = "your-password"
-```
-
-Notes:
-- `url` must be a full `http://` or `https://` URL.
-- `url` may include a base path, for example `http://host:8080/remote.php/dav/files/user`.
-- Destination paths (`dest_*`) are interpreted as remote WebDAV paths.
-- If `dest_*` values expand to local home paths (for example `~/Sync/...`), Retrosync maps them to WebDAV-rooted paths (for example `/Sync/...`).
-
-Notes:
-- `dest_folder` is optional. If omitted, Retrosync uses `src_folder`.
-- Use `dest_folder` only when target folder names differ (for example Steam Deck short names like `psx`, `gba`).
-- `dest_bios` is optional. If omitted, it defaults to `<dest_retroarch_base>/system`.
-
-## Usage
-
-
-
-![Usage](https://github.com/optixx/retrosync/raw/main/assets/img/usage.png)
-
-To synchronize all your playlists (as defined in your TOML configuration file) and ROMs onto your Steam Deck, simply execute the following command:
+### Using `uv` (recommended)
 
 ```sh
-python retrosync.py --sync-roms --sync-playlists
-```
+git clone https://github.com/optixx/retrosync.git
+cd retrosync
 
-To override transport from CLI without editing config:
-
-```sh
-python retrosync.py --sync-roms --sync-playlists --transport webdav
-```
-
- To view extensive information regarding current operations, include `--debug` in your command to generate detailed logs within a `debug.log` file.
-
-```sh
-python retrosync.py --sync-roms --sync-playlists --debug
-```
-
- To synchronize all local resources such as playlists, game ROMs, BIOS files, and thumbnails to your Steam Deck:
-
-```sh
-
-python retrosync.py --all
-```
-
- Playlist and ROM actions can be limited to a single system, as follows:
-
-```sh
-python retrosync.py --debug --sync-roms --sync-playlists --name "psx"
-Do you want to continue with playlists 'Sony - PlayStation.lpl'? [y/N]:
-```
-
- You have the option to include `--yes` in order to bypass the prompt.
-
-```sh
-python retrosync.py --debug --sync-roms --sync-playlists --name "psx" --yes
-```
-
- To refresh and recreate a local playlist by scanning your ROM folder:
-
-```sh
-python retrosync.py --debug --update-playlists --name "psx"
-```
-
- Forcibly use the Windows Transport Module to avoid relying on locally installed shell commands such as 'scp' and 'rsync'.
-
-```sh
-python retrosync.py --debug --sync-playlists --name "psx" --transport-windows
-```
-
-## Installing
-
-To install Retrosync, follow these steps (detailed steps are also available in the `setup.sh` for Unix-based systems and `setup.bat` for Windows systems):
-
-1. **Clone the Repository**: First, clone the Retrosync repository to your local machine.
-    ```sh
-    git clone https://github.com/optixx/retrosync.git
-    cd retrosync
-    ```
-
-2. **Set Up Virtual Environment**: Install [uv](https://github.com/astral-sh/uv), then create and activate a Python 3.12 virtual environment:
-    ```sh
-    uv venv --python 3.12
-    source .venv/bin/activate  # On Windows use `.venv\Scripts\activate`
-    ```
-
-3. **Install Dependencies**: Sync project dependencies and development tools from `pyproject.toml`:
-    ```sh
-    uv sync --all-groups --python 3.12
-    ```
-
-4. **Configuration**: By default, the `steamdeck.toml` configuration file is employed. You can alter the configuration file by utilizing the command switch `--config-file` to specify an alternate filename.
-
-After completing these steps, Retrosync should be installed and ready to use.
-
-## Bundled Binaries
-
-For users who cannot set up a Python environment, bundled binaries of the script are available for download in the [GitHub releases](https://github.com/optixx/retrosync/releases).
+uv venv --python 3.12
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+uv sync --all-groups --python 3.12
