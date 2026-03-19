@@ -83,14 +83,40 @@ class BiosSync(GlobalJob):
         self.transport.copy_files(self.src, self.dst, **kwargs)
 
 
-class ThumbnailsSync(BiosSync):
+class ThumbnailsSync(JobBase):
     name = "Thumbnails"
 
-    def setup(self):
-        self.src = Path(self.default.get("src_thumbnails"))
-        self.dst = Path(self.default.get("dest_thumbnails"))
+    def __init__(self, default, transport):
+        self.default = default
+        self.transport = transport
+        self._deferred_messages = []
+        self._final_deferred_messages = []
+        self.size = 0
+        self.transfer_bytes = 0
+
+    def setup(self, playlist):
+        self.playlist = playlist
+        system_name = Path(self.playlist.get("name", "")).stem
+        self.src = Path(self.default.get("src_thumbnails")) / system_name
+        self.dst = Path(self.default.get("dest_thumbnails")) / system_name
+        if not self.src.is_dir():
+            self.size = 0
+            self.transfer_bytes = 0
+            return
         self.size = self.transport.guess_file_count(self.src, [], True)
         self.transfer_bytes = self.transport.guess_total_size(self.src, [], True)
+
+    def do(self, callback=None, cancel_check=None):
+        if not self.src.is_dir():
+            return
+        kwargs = {
+            "whitelist": [],
+            "recursive": True,
+            "callback": callback,
+        }
+        if cancel_check is not None:
+            kwargs["cancel_check"] = cancel_check
+        self.transport.copy_files(self.src, self.dst, **kwargs)
 
 
 class FavoritesSync(BiosSync):

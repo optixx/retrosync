@@ -1,5 +1,4 @@
 import pytest
-from pathlib import Path
 from unittest.mock import Mock
 from retrosync import ThumbnailsSync, TransportSSHUnix
 
@@ -48,19 +47,29 @@ def dry_run():
     return False
 
 
-def test_thumbnails_sync_setup(default_config, playlists, dry_run):
+def test_thumbnails_sync_setup(tmp_path, default_config, dry_run):
+    system_dir = tmp_path / "Nintendo - Entertainment System" / "Named_Boxarts"
+    system_dir.mkdir(parents=True)
+    (system_dir / "Mario.png").write_bytes(b"img")
+    default_config["src_thumbnails"] = str(tmp_path)
+    default_config["dest_thumbnails"] = str(tmp_path / "dest")
     transport = TransportSSHUnix(default_config, dry_run)
-    thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
-    thumbnails_sync.setup()
-    assert thumbnails_sync.src == Path("tests/assets/thumbnails")
-    assert thumbnails_sync.dst == Path("tests/assets/thumbnails")
+    thumbnails_sync = ThumbnailsSync(default_config, transport)
+    thumbnails_sync.setup({"name": "Nintendo - Entertainment System.lpl"})
+    assert thumbnails_sync.src == tmp_path / "Nintendo - Entertainment System"
+    assert thumbnails_sync.dst == tmp_path / "dest" / "Nintendo - Entertainment System"
     assert thumbnails_sync.size == transport.guess_file_count(thumbnails_sync.src, [], True)
 
 
-def test_thumbnails_sync_do(default_config, playlists, dry_run, mocker):
+def test_thumbnails_sync_do(tmp_path, default_config, dry_run, mocker):
+    system_dir = tmp_path / "Nintendo - Entertainment System" / "Named_Boxarts"
+    system_dir.mkdir(parents=True)
+    (system_dir / "Mario.png").write_bytes(b"img")
+    default_config["src_thumbnails"] = str(tmp_path)
+    default_config["dest_thumbnails"] = str(tmp_path / "dest")
     transport = TransportSSHUnix(default_config, dry_run)
-    thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
-    thumbnails_sync.setup()
+    thumbnails_sync = ThumbnailsSync(default_config, transport)
+    thumbnails_sync.setup({"name": "Nintendo - Entertainment System.lpl"})
 
     mock_copy_files = mocker.patch.object(transport, "copy_files")
     thumbnails_sync.do()
@@ -74,10 +83,15 @@ def test_thumbnails_sync_do(default_config, playlists, dry_run, mocker):
     )
 
 
-def test_thumbnails_sync_do_forwards_callback(default_config, playlists, dry_run, mocker):
+def test_thumbnails_sync_do_forwards_callback(tmp_path, default_config, dry_run, mocker):
+    system_dir = tmp_path / "Nintendo - Entertainment System" / "Named_Boxarts"
+    system_dir.mkdir(parents=True)
+    (system_dir / "Mario.png").write_bytes(b"img")
+    default_config["src_thumbnails"] = str(tmp_path)
+    default_config["dest_thumbnails"] = str(tmp_path / "dest")
     transport = TransportSSHUnix(default_config, dry_run)
-    thumbnails_sync = ThumbnailsSync(default_config, playlists, transport)
-    thumbnails_sync.setup()
+    thumbnails_sync = ThumbnailsSync(default_config, transport)
+    thumbnails_sync.setup({"name": "Nintendo - Entertainment System.lpl"})
     callback = Mock()
 
     mock_copy_files = mocker.patch.object(transport, "copy_files")
@@ -90,3 +104,18 @@ def test_thumbnails_sync_do_forwards_callback(default_config, playlists, dry_run
         recursive=True,
         callback=callback,
     )
+
+
+def test_thumbnails_sync_missing_system_is_noop(tmp_path, default_config, dry_run, mocker):
+    default_config["src_thumbnails"] = str(tmp_path)
+    default_config["dest_thumbnails"] = str(tmp_path / "dest")
+    transport = TransportSSHUnix(default_config, dry_run)
+    thumbnails_sync = ThumbnailsSync(default_config, transport)
+    thumbnails_sync.setup({"name": "Missing System.lpl"})
+
+    mock_copy_files = mocker.patch.object(transport, "copy_files")
+    thumbnails_sync.do()
+
+    assert thumbnails_sync.size == 0
+    assert thumbnails_sync.transfer_bytes == 0
+    mock_copy_files.assert_not_called()

@@ -179,12 +179,10 @@ class SyncRunner:
                 self.job_registry.favorites_sync(self.default, self.playlists, self.transport)
             )
 
-        if cfg.do_sync_thumbnails:
-            jobs.append(
-                self.job_registry.thumbnails_sync(self.default, self.playlists, self.transport)
-            )
-
         system_jobs = []
+        if cfg.do_sync_thumbnails:
+            system_jobs.append(self.job_registry.thumbnails_sync(self.default, self.transport))
+
         if cfg.do_update_playlists:
             system_jobs.append(self.job_registry.playlist_update_job(self.default, self.transport))
 
@@ -316,6 +314,7 @@ class SyncRunner:
             if (
                 cfg.do_update_playlists
                 or cfg.do_update_thumbnails
+                or cfg.do_sync_thumbnails
                 or cfg.do_sync_playlists
                 or cfg.do_sync_roms
             ):

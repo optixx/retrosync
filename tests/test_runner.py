@@ -261,3 +261,41 @@ def test_runner_filters_update_thumbnails_to_selected_system():
         "Sony - PlayStation.lpl",
     ]
     assert DummySystemJob.do_calls == ["Sony - PlayStation.lpl"]
+
+
+def test_runner_filters_sync_thumbnails_to_selected_system():
+    DummySystemJob.setup_calls = []
+    DummySystemJob.do_calls = []
+    reporter = DummyReporter()
+    runner = SyncRunner(
+        default={},
+        playlists=[
+            {"name": "Sony - PlayStation.lpl", "src_folder": "psx", "dest_folder": "psx"},
+            {"name": "Nintendo - GameCube.lpl", "src_folder": "gc", "dest_folder": "gc"},
+        ],
+        transport=DummyTransport(),
+        reporter=reporter,
+        job_registry=JobRegistry(thumbnails_sync=DummySystemJob),
+    )
+
+    runner.run(
+        SyncRunConfig(
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_favorites=False,
+            do_sync_thumbnails=True,
+            do_sync_roms=False,
+            do_update_playlists=False,
+            do_update_thumbnails=False,
+            dry_run=True,
+            do_debug=False,
+        ),
+        system_name="Sony - PlayStation.lpl",
+    )
+
+    assert DummySystemJob.setup_calls == [
+        "Sony - PlayStation.lpl",
+        "Sony - PlayStation.lpl",
+        "Sony - PlayStation.lpl",
+    ]
+    assert DummySystemJob.do_calls == ["Sony - PlayStation.lpl"]
