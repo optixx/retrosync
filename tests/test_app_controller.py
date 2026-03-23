@@ -42,6 +42,15 @@ class DummyRunner:
         self.reporter.finish()
 
 
+class FailingRunner:
+    def __init__(self, *, default, playlists, transport, reporter, job_registry, event_sink):
+        _ = (default, playlists, transport, reporter, job_registry, event_sink)
+
+    def run(self, cfg, *, system_name=None, cancel_token=None):
+        _ = (cfg, system_name, cancel_token)
+        raise RuntimeError("boom")
+
+
 def _config():
     return {
         "default": {
@@ -62,6 +71,21 @@ def _config():
     }
 
 
+def _broken_config():
+    return {
+        "default": {
+            "transport": "filesystem",
+            "src_roms": ["tests/assets/roms"],
+            "src_playlists": "tests/assets/playlists",
+            "dest_playlists": "tests/assets/playlists",
+            "src_cores": "",
+        },
+        "playlists": [
+            {"name": "Sony - PlayStation.lpl", "src_folder": "psx", "dest_folder": "psx"},
+        ],
+    }
+
+
 def test_controller_load_config_populates_state(tmp_path):
     controller = RetrosyncAppController(
         toml_loader=lambda _: _config(),
@@ -77,6 +101,22 @@ def test_controller_load_config_populates_state(tmp_path):
     assert [row.name for row in state.systems] == ["Sony - PlayStation", "Nintendo - NES"]
     assert len(state.preview.plan_rows) >= 1
     assert state.preview.planned_copies >= 1
+
+
+def test_controller_load_config_validates_selected_actions(tmp_path):
+    controller = RetrosyncAppController(
+        toml_loader=lambda _: _broken_config(),
+        app_state_path=tmp_path / "gui-state.json",
+    )
+
+    loaded = controller.load_config("broken.conf")
+    state = controller.snapshot()
+
+    assert loaded is False
+    assert state.config_loaded is True
+    assert state.config_error is not None
+    assert "'target_roms' is required for --sync-playlists" in state.config_error
+    assert state.preview.plan_rows == []
 
 
 def test_controller_run_updates_state_from_bridge_events(tmp_path):
@@ -109,6 +149,32 @@ def test_controller_run_updates_state_from_bridge_events(tmp_path):
     assert len(state.preview.reports) == 1
     assert state.preview.reports[0].kind == "transfer_estimate"
     assert any("Run started." in entry.message for entry in state.logs)
+
+
+def test_controller_worker_failure_marks_run_failed_without_sticking(tmp_path):
+    controller = RetrosyncAppController(
+        toml_loader=lambda _: _config(),
+        transport_factory=lambda default, dry_run, force_transport: DummyTransport(),
+        runner_factory=FailingRunner,
+        app_state_path=tmp_path / "gui-state.json",
+    )
+    controller.load_config("test.conf")
+    controller.set_action("do_sync_playlists", True)
+
+    started = controller.start_run(dry_run=True)
+    assert started is True
+
+    for _ in range(50):
+        controller.drain_events()
+        state = controller.snapshot()
+        if state.run_state.status == "failed":
+            break
+        time.sleep(0.01)
+
+    state = controller.snapshot()
+    assert state.run_state.status == "failed"
+    assert state.run_state.can_cancel is False
+    assert state.run_state.last_error == "boom"
 
 
 def test_controller_persists_last_config_and_selected_actions(tmp_path):

@@ -220,6 +220,8 @@ class RetrosyncAppController:
             self._set_config_error("Config path is required.")
             return False
 
+        self._state.run_state = RunState()
+
         try:
             self._context = load_runtime_context(
                 config_loader=self._toml_loader,
@@ -241,10 +243,13 @@ class RetrosyncAppController:
             return False
 
         self._state.config_loaded = True
-        self._state.config_error = None
-        self._state.status_message = f"Loaded config from {config_path}"
-        self._append_log("info", self._state.status_message)
         self._refresh_preview_plan()
+        if self._state.config_error:
+            self._state.status_message = f"Loaded config from {config_path} with validation errors."
+            self._append_unique_log("warning", self._state.status_message)
+            return False
+        self._state.status_message = f"Loaded config from {config_path}"
+        self._append_unique_log("info", self._state.status_message)
         return True
 
     def reload_config(self):
@@ -398,13 +403,25 @@ class RetrosyncAppController:
             return
         selected_playlists = self._selected_playlists()
         run_cfg = self._build_run_config(self._state.run_setup.dry_run)
-        plan = build_preview_plan(
-            default=self._default,
+        validation_error = self._validate_current_selection(
             playlists=selected_playlists,
             run_cfg=run_cfg,
-            apply_changes=self._state.run_setup.apply_changes,
-            force_transport=self._state.run_setup.force_transport,
         )
+        if validation_error:
+            self._state.preview = PreviewState()
+            return
+        try:
+            plan = build_preview_plan(
+                default=self._default,
+                playlists=selected_playlists,
+                run_cfg=run_cfg,
+                apply_changes=self._state.run_setup.apply_changes,
+                force_transport=self._state.run_setup.force_transport,
+            )
+        except Exception as exc:
+            self._state.preview = PreviewState()
+            self._set_config_error(str(exc), keep_loaded=True)
+            return
         reports = list(self._state.preview.reports)
         self._state.preview = PreviewState(
             estimated_transfer_bytes=plan.estimated_transfer_bytes,
@@ -428,6 +445,23 @@ class RetrosyncAppController:
             ],
             reports=reports,
         )
+
+    def _validate_current_selection(self, *, playlists, run_cfg):
+        if self._default is None:
+            return None
+        try:
+            validate_run_request(
+                copy.deepcopy(self._default),
+                [dict(playlist) for playlist in playlists],
+                run_cfg,
+                apply_changes=self._state.run_setup.apply_changes,
+            )
+        except ValueError as exc:
+            self._set_config_error(str(exc), keep_loaded=True)
+            return str(exc)
+
+        self._state.config_error = None
+        return None
 
     def _selected_playlists(self):
         selected_names = {
@@ -598,6 +632,13 @@ class RetrosyncAppController:
         )
         self._state.logs = self._state.logs[-500:]
 
+    def _append_unique_log(self, level, message, *, source="app"):
+        if self._state.logs:
+            last = self._state.logs[-1]
+            if last.level == level and last.message == str(message) and last.source == source:
+                return
+        self._append_log(level, message, source=source)
+
     def _load_persisted_state(self):
         payload = load_app_state(self._app_state_path)
         config_path = payload.get("config_path")
@@ -623,11 +664,11 @@ class RetrosyncAppController:
         except OSError:
             self._append_log("warning", f"Failed to save app state to {self._app_state_path}")
 
-    def _set_config_error(self, message):
-        self._state.config_loaded = False
+    def _set_config_error(self, message, *, keep_loaded=False):
+        self._state.config_loaded = bool(keep_loaded and self._default is not None)
         self._state.config_error = str(message)
         self._state.status_message = str(message)
-        self._append_log("error", message)
+        self._append_unique_log("error", message)
 
     def _set_run_error(self, message):
         self._state.run_state = replace(

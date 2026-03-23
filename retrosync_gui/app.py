@@ -14,6 +14,7 @@ class RetrosyncGuiApp:
         self._last_system_signature = None
         self._last_log_signature = None
         self._last_plan_signature = None
+        self._last_error_signature = None
 
     def run(self):
         dpg.create_context()
@@ -103,6 +104,26 @@ class RetrosyncGuiApp:
             dpg.add_file_extension(".conf", color=(90, 180, 200, 255))
             dpg.add_file_extension(".toml", color=(90, 180, 200, 255))
             dpg.add_file_extension(".*")
+
+        with dpg.window(
+            tag="error_popup",
+            label="Error",
+            modal=True,
+            show=False,
+            no_resize=True,
+            no_collapse=True,
+            width=720,
+            height=280,
+        ):
+            dpg.add_text("Retrosync hit an error.")
+            dpg.add_separator()
+            dpg.add_text(tag="error_popup_message", wrap=680, default_value="")
+            dpg.add_spacer(height=12)
+            dpg.add_button(
+                label="Close",
+                width=self.ACTION_BUTTON_WIDTH,
+                callback=lambda: dpg.configure_item("error_popup", show=False),
+            )
 
         with dpg.window(
             tag="main_window",
@@ -426,6 +447,7 @@ class RetrosyncGuiApp:
             self._cancel_button_theme if cancel_enabled else self._cancel_disabled_button_theme,
         )
         dpg.set_value("error_line", state.run_state.last_error or state.config_error or "")
+        self._refresh_error_popup(state)
 
         filter_text = state.system_filter.strip().lower()
         matching_rows = [
@@ -565,6 +587,8 @@ class RetrosyncGuiApp:
         )
 
     def _can_start_run(self, state):
+        if not state.config_loaded or state.config_error:
+            return False
         selected_count = len([row for row in state.systems if row.selected and not row.disabled])
         action_selected = any(
             getattr(state.run_setup, field_name)
@@ -582,6 +606,14 @@ class RetrosyncGuiApp:
 
     def _can_cancel_run(self, state):
         return state.run_state.can_cancel and state.run_state.status in {"validating", "running"}
+
+    def _refresh_error_popup(self, state):
+        message = state.config_error or ""
+        signature = state.config_error
+        if message and signature != self._last_error_signature:
+            dpg.set_value("error_popup_message", message)
+            dpg.configure_item("error_popup", show=True)
+        self._last_error_signature = signature
 
 
 def launch_gui():
