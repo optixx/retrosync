@@ -21,6 +21,7 @@ class RuntimeConfigModel(BaseModel):
     src_thumbnails: str | None = None
     src_cores: str | None = None
     src_cores_suffix: str | None = None
+    dest_retroarch_base: str | None = None
     dest_playlists: str | None = None
     dest_roms: str | None = None
     dest_bios: str | None = None
@@ -40,6 +41,13 @@ class PlaylistConfigModel(BaseModel):
     src_core_path: str | None = None
     src_core_name: str | None = None
     disabled: bool = False
+
+
+class ShaderConfigModel(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
+    name: str
+    shader: str
 
 
 def rank_system_matches(system_name, playlists, limit=8):
@@ -160,6 +168,7 @@ def expand_config(default):
         "src_config",
         "src_cores",
         "src_thumbnails",
+        "dest_retroarch_base",
         "dest_playlists",
         "dest_bios",
         "dest_config",
@@ -219,12 +228,14 @@ def normalize_playlists(playlists):
 def validate_runtime_config(
     default,
     playlists,
+    cores=None,
     *,
     do_sync_playlists: bool,
     do_sync_bios: bool,
     do_sync_favorites: bool,
     do_sync_thumbnails: bool,
     do_sync_roms: bool,
+    do_sync_shaders: bool,
     do_update_playlists: bool,
     do_update_thumbnails: bool,
 ):
@@ -235,11 +246,18 @@ def validate_runtime_config(
         raise ValueError(str(exc)) from exc
 
     parsed_playlists = []
+    parsed_shaders = []
     for idx, playlist in enumerate(playlists, start=1):
         try:
             parsed_playlists.append(PlaylistConfigModel.model_validate(playlist))
         except ValidationError as exc:
             errors.append(f"[playlists][{idx}] {exc.errors()[0].get('msg', 'invalid entry')}")
+
+    for idx, shader in enumerate(cores or [], start=1):
+        try:
+            parsed_shaders.append(ShaderConfigModel.model_validate(shader))
+        except ValidationError as exc:
+            errors.append(f"[shaders][{idx}] {exc.errors()[0].get('msg', 'invalid entry')}")
 
     def require_default(key, reason):
         value = default.get(key)
@@ -290,6 +308,18 @@ def validate_runtime_config(
     if do_sync_thumbnails:
         require_default("src_thumbnails", "--sync-thumbnails")
         require_default("dest_thumbnails", "--sync-thumbnails")
+
+    if do_sync_shaders:
+        require_default("dest_retroarch_base", "--sync-shaders")
+        if not parsed_shaders:
+            errors.append("[shaders] at least one shader is required for --sync-shaders")
+        for idx, shader in enumerate(parsed_shaders, start=1):
+            value = shader.name
+            if isinstance(value, str) and value.strip() == "":
+                errors.append(f"[shaders][{idx}] 'name' must not be empty for --sync-shaders")
+            value = shader.shader
+            if isinstance(value, str) and value.strip() == "":
+                errors.append(f"[shaders][{idx}] 'shader' must not be empty for --sync-shaders")
 
     if needs_system_jobs and parsed_playlists:
         require_playlist_attr("name", "system jobs")

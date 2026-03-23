@@ -13,6 +13,7 @@ from .jobs import (
     PlaylistSyncJob,
     PlaylistUpdateJob,
     RomSyncJob,
+    ShaderSync,
     ThumbnailsUpdateJob,
     ThumbnailsSync,
 )
@@ -36,6 +37,7 @@ class SyncRunConfig:
     do_sync_favorites: bool
     do_sync_thumbnails: bool
     do_sync_roms: bool
+    do_sync_shaders: bool
     do_update_playlists: bool
     do_update_thumbnails: bool
     dry_run: bool = False
@@ -46,6 +48,7 @@ class SyncRunConfig:
 class JobRegistry:
     bios_sync: type = BiosSync
     favorites_sync: type = FavoritesSync
+    shader_sync: type = ShaderSync
     thumbnails_sync: type = ThumbnailsSync
     playlist_sync_job: type = PlaylistSyncJob
     playlist_update_job: type = PlaylistUpdateJob
@@ -178,6 +181,9 @@ class SyncRunner:
             jobs.append(
                 self.job_registry.favorites_sync(self.default, self.playlists, self.transport)
             )
+
+        if cfg.do_sync_shaders:
+            jobs.append(self.job_registry.shader_sync(self.default, self.playlists, self.transport))
 
         system_jobs = []
         if cfg.do_sync_thumbnails:

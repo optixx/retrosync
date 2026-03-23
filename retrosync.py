@@ -37,6 +37,7 @@ from retrosync_core.jobs import (
     PlaylistUpdateJob,
     PlaylistUpdatecJob,
     RomSyncJob,
+    ShaderSync,
     SystemJob,
     ThumbnailsUpdateJob,
     ThumbnailsSync,
@@ -108,6 +109,7 @@ __all__ = [
     "BiosSync",
     "ThumbnailsSync",
     "FavoritesSync",
+    "ShaderSync",
     "RomSyncJob",
     "PlaylistSyncJob",
     "PlaylistUpdateJob",
@@ -288,7 +290,7 @@ class CliRichReporter:
     "-a",
     "do_all",
     is_flag=True,
-    help="Sync all files (ROMs, playlists,favorites, BIOS files and thumbnails)",
+    help="Sync all files (ROMs, playlists, favorites, BIOS files, thumbnails and shaders)",
 )
 @click.option(
     "--sync-playlists",
@@ -316,6 +318,13 @@ class CliRichReporter:
 )
 @click.option(
     "--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync ROMs files to target system"
+)
+@click.option(
+    "--sync-shaders",
+    "-s",
+    "do_sync_shaders",
+    is_flag=True,
+    help="Sync local shader presets for configured cores",
 )
 @click.option(
     "--update-playlists",
@@ -406,6 +415,7 @@ def main(
     do_sync_favorites,
     do_sync_thumbails,
     do_sync_roms,
+    do_sync_shaders,
     do_update_playlists,
     do_update_thumbnails,
     apply_changes,
@@ -445,7 +455,7 @@ def main(
     if do_all:
         do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_favorites = do_sync_thumbails = (
             do_update_playlists
-        ) = do_update_thumbnails = True
+        ) = do_update_thumbnails = do_sync_shaders = True
 
     if not any(
         [
@@ -456,6 +466,7 @@ def main(
             do_sync_thumbails,
             do_update_playlists,
             do_update_thumbnails,
+            do_sync_shaders,
             do_playlist_list,
         ]
     ):
@@ -506,6 +517,7 @@ def main(
             do_sync_favorites=do_sync_favorites,
             do_sync_thumbnails=do_sync_thumbails,
             do_sync_roms=do_sync_roms,
+            do_sync_shaders=do_sync_shaders,
             do_update_playlists=do_update_playlists,
             do_update_thumbnails=do_update_thumbnails,
             dry_run=dry_run,
@@ -539,6 +551,7 @@ def main(
             job_registry=JobRegistry(
                 bios_sync=BiosSync,
                 favorites_sync=FavoritesSync,
+                shader_sync=ShaderSync,
                 thumbnails_sync=ThumbnailsSync,
                 playlist_sync_job=PlaylistSyncJob,
                 playlist_update_job=PlaylistUpdateJob,

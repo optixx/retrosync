@@ -30,6 +30,7 @@ class RuntimeContext:
     raw_config: dict
     default: dict
     playlists: list[dict]
+    cores: list[dict]
 
 
 @dataclass(frozen=True)
@@ -77,11 +78,14 @@ def load_runtime_context(
     default["_refresh_thumbnail_cache"] = bool(refresh_thumbnail_cache)
     default["_no_thumbnail_cache"] = bool(no_thumbnail_cache)
     playlists = normalize_playlists(copy.deepcopy(raw_config.get("playlists", [])))
+    shaders = copy.deepcopy(raw_config.get("shaders", []))
+    default["_shaders"] = copy.deepcopy(shaders)
     return RuntimeContext(
         config_file=str(config_file),
         raw_config=copy.deepcopy(raw_config),
         default=default,
         playlists=playlists,
+        cores=shaders,
     )
 
 
@@ -92,6 +96,7 @@ def build_run_config(
     do_sync_favorites,
     do_sync_thumbnails,
     do_sync_roms,
+    do_sync_shaders,
     do_update_playlists,
     do_update_thumbnails,
     dry_run,
@@ -103,6 +108,7 @@ def build_run_config(
         do_sync_favorites=do_sync_favorites,
         do_sync_thumbnails=do_sync_thumbnails,
         do_sync_roms=do_sync_roms,
+        do_sync_shaders=do_sync_shaders,
         do_update_playlists=do_update_playlists,
         do_update_thumbnails=do_update_thumbnails,
         dry_run=dry_run,
@@ -120,11 +126,13 @@ def validate_run_request(default, playlists, run_cfg, *, apply_changes=False):
     validate_runtime_config(
         default,
         playlists,
+        default.get("_shaders", []),
         do_sync_playlists=run_cfg.do_sync_playlists,
         do_sync_bios=run_cfg.do_sync_bios,
         do_sync_favorites=run_cfg.do_sync_favorites,
         do_sync_thumbnails=run_cfg.do_sync_thumbnails,
         do_sync_roms=run_cfg.do_sync_roms,
+        do_sync_shaders=run_cfg.do_sync_shaders,
         do_update_playlists=run_cfg.do_update_playlists,
         do_update_thumbnails=run_cfg.do_update_thumbnails,
     )

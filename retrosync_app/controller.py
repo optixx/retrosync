@@ -477,6 +477,7 @@ class RetrosyncAppController:
             do_sync_favorites=run_setup.do_sync_favorites,
             do_sync_thumbnails=run_setup.do_sync_thumbnails,
             do_sync_roms=run_setup.do_sync_roms,
+            do_sync_shaders=run_setup.do_sync_shaders,
             do_update_playlists=run_setup.do_update_playlists,
             do_update_thumbnails=run_setup.do_update_thumbnails,
             dry_run=bool(dry_run),

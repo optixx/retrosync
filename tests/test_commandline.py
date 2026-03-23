@@ -226,6 +226,79 @@ def test_update_thumbnails_cli_sets_run_config_and_forwards_name_filter():
     assert fake_runner.run.call_args.kwargs["system_name"] == "Sony - PlayStation.lpl"
 
 
+def test_sync_shaders_cli_sets_run_config():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_roms": [],
+            "dest_retroarch_base": "/retroarch/config",
+        },
+        "shaders": [
+            {"name": "Snes9x", "shader": "crt/crt-guest-advanced.slangp"},
+        ],
+        "playlists": [],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = CliRunner().invoke(
+            main,
+            [
+                "--dry-run",
+                "--sync-shaders",
+                "--yes",
+                "--config-file=ignored.conf",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert run_cfg.do_sync_shaders is True
+    assert run_cfg.dry_run is True
+
+
+def test_sync_shaders_short_flag_sets_run_config():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_roms": [],
+            "dest_retroarch_base": "/retroarch/config",
+        },
+        "shaders": [
+            {"name": "Snes9x", "shader": "crt/crt-guest-advanced.slangp"},
+        ],
+        "playlists": [],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = CliRunner().invoke(
+            main,
+            [
+                "--dry-run",
+                "-s",
+                "--yes",
+                "--config-file=ignored.conf",
+            ],
+        )
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert run_cfg.do_sync_shaders is True
+
+
 def test_update_thumbnails_apply_requires_src_thumbnails():
     fake_config = {
         "default": {

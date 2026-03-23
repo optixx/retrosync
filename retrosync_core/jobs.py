@@ -62,6 +62,15 @@ class GlobalJob(JobBase):
     def setup(self):
         pass
 
+    def add_deferred_message(self, message):
+        if message:
+            self._deferred_messages.append(str(message))
+
+    def consume_deferred_messages(self):
+        messages = list(self._deferred_messages)
+        self._deferred_messages.clear()
+        return messages
+
 
 class BiosSync(GlobalJob):
     name = "BIOS"
@@ -81,6 +90,45 @@ class BiosSync(GlobalJob):
         if cancel_check is not None:
             kwargs["cancel_check"] = cancel_check
         self.transport.copy_files(self.src, self.dst, **kwargs)
+
+
+class ShaderSync(GlobalJob):
+    name = "Shaders"
+
+    def setup(self):
+        self.dst_base = Path(self.default.get("dest_retroarch_base"))
+        self._generated_files = []
+        self.transfer_bytes = 0
+
+        for shader in self.default.get("_shaders", []):
+            core_name = str(shader.get("name", "")).strip()
+            shader_file = str(shader.get("shader", "")).strip()
+            if not core_name:
+                continue
+            if not shader_file:
+                continue
+            dst = self.dst_base / "config" / core_name / f"{core_name}.slangp"
+            content = f'#reference "../../shaders/shaders_slang/{shader_file}"\n'
+            self._generated_files.append((content, dst))
+            self.transfer_bytes += len(content.encode("utf-8"))
+
+        self.size = len(self._generated_files)
+
+        self.add_deferred_message(f"Shader presets generated: {len(self._generated_files)}")
+
+    def do(self, callback=None, cancel_check=None):
+        for content, dst in self._generated_files:
+            logger.debug("shader-sync: generate dest=%s", dst)
+            logger.debug("shader-sync: content=\n%s", content.rstrip("\n"))
+            with tempfile.NamedTemporaryFile() as temp_file:
+                temp_file.write(content.encode("utf-8"))
+                temp_file.flush()
+                kwargs = {}
+                if cancel_check is not None:
+                    kwargs["cancel_check"] = cancel_check
+                self.transport.copy_file(Path(temp_file.name), dst, **kwargs)
+                if callback:
+                    callback()
 
 
 class ThumbnailsSync(JobBase):

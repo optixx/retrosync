@@ -45,11 +45,13 @@ def test_validate_runtime_config_requires_webdav_url():
         validate_runtime_config(
             default,
             _base_playlists(),
+            [],
             do_sync_playlists=False,
             do_sync_bios=False,
             do_sync_favorites=False,
             do_sync_thumbnails=False,
             do_sync_roms=False,
+            do_sync_shaders=False,
             do_update_playlists=False,
             do_update_thumbnails=False,
         )
@@ -63,11 +65,13 @@ def test_validate_runtime_config_requires_sync_bios_paths():
         validate_runtime_config(
             default,
             _base_playlists(),
+            [],
             do_sync_playlists=False,
             do_sync_bios=True,
             do_sync_favorites=False,
             do_sync_thumbnails=False,
             do_sync_roms=False,
+            do_sync_shaders=False,
             do_update_playlists=False,
             do_update_thumbnails=False,
         )
@@ -84,11 +88,13 @@ def test_validate_runtime_config_requires_playlist_core_fields_for_update():
         validate_runtime_config(
             default,
             playlists,
+            [],
             do_sync_playlists=False,
             do_sync_bios=False,
             do_sync_favorites=False,
             do_sync_thumbnails=False,
             do_sync_roms=False,
+            do_sync_shaders=False,
             do_update_playlists=True,
             do_update_thumbnails=False,
         )
@@ -101,11 +107,13 @@ def test_validate_runtime_config_allows_sync_roms_with_empty_folder_names():
     validate_runtime_config(
         default,
         playlists,
+        [],
         do_sync_playlists=False,
         do_sync_bios=False,
         do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=True,
+        do_sync_shaders=False,
         do_update_playlists=False,
         do_update_thumbnails=False,
     )
@@ -119,11 +127,55 @@ def test_validate_runtime_config_requires_playlist_source_for_update_thumbnails(
         validate_runtime_config(
             default,
             _base_playlists(),
+            [],
             do_sync_playlists=False,
             do_sync_bios=False,
             do_sync_favorites=False,
             do_sync_thumbnails=False,
             do_sync_roms=False,
+            do_sync_shaders=False,
             do_update_playlists=False,
             do_update_thumbnails=True,
+        )
+
+
+def test_validate_runtime_config_requires_shaders_for_sync_shaders():
+    default = _base_default()
+    default["dest_retroarch_base"] = "/dest/retroarch"
+
+    with pytest.raises(
+        ValueError, match=r"\[shaders\] at least one shader is required for --sync-shaders"
+    ):
+        validate_runtime_config(
+            default,
+            _base_playlists(),
+            [],
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_favorites=False,
+            do_sync_thumbnails=False,
+            do_sync_roms=False,
+            do_sync_shaders=True,
+            do_update_playlists=False,
+            do_update_thumbnails=False,
+        )
+
+
+def test_validate_runtime_config_requires_shader_field_for_sync_shaders():
+    default = _base_default()
+    default["dest_retroarch_base"] = "/dest/retroarch"
+
+    with pytest.raises(ValueError, match=r"\[shaders\]\[1\] Field required"):
+        validate_runtime_config(
+            default,
+            _base_playlists(),
+            [{"name": "Snes9x"}],
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_favorites=False,
+            do_sync_thumbnails=False,
+            do_sync_roms=False,
+            do_sync_shaders=True,
+            do_update_playlists=False,
+            do_update_thumbnails=False,
         )
