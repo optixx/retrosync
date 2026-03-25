@@ -26,6 +26,118 @@ url = "http://192.168.1.100"
 username = ""
 password = ""
 
+[[shaders]]
+name = "Stella"
+shader = "crt/crt-easymode.slangp"
+
+[[shaders]]
+name = "ProSystem"
+shader = "crt/crt-easymode.slangp"
+
+[[shaders]]
+name = "Atari800"
+shader = "crt/crt-easymode.slangp"
+
+[[shaders]]
+name = "VirtualJaguar"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Handy"
+shader = "handheld/lcd-grid.slangp"
+
+[[shaders]]
+name = "Beetle Cygne"
+shader = "handheld/lcd-grid.slangp"
+
+[[shaders]]
+name = "Gearcoleco"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "VICE x64sc"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "PUAE"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "PrBoom"
+shader = "interpolation/bilinear.slangp"
+
+[[shaders]]
+name = "FinalBurn Neo"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "MAME 2003-Plus"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "mGBA"
+shader = "handheld/lcd-grid-v2.slangp"
+
+[[shaders]]
+name = "Gambatte"
+shader = "handheld/lcd-grid.slangp"
+
+[[shaders]]
+name = "Mupen64Plus-Next"
+shader = "interpolation/bilinear.slangp"
+
+[[shaders]]
+name = "melonDS"
+shader = "handheld/lcd-grid-v2.slangp"
+
+[[shaders]]
+name = "Mesen"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Snes9x"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Beetle VB"
+shader = "handheld/lcd-grid-v2.slangp"
+
+[[shaders]]
+name = "Beetle PCE"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "vitaQuakeII"
+shader = "interpolation/bilinear.slangp"
+
+[[shaders]]
+name = "PicoDrive"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Yabause"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "PX68k"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Beetle NeoPop"
+shader = "handheld/lcd-grid.slangp"
+
+[[shaders]]
+name = "Beetle PSX"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "PPSSPP"
+shader = "interpolation/sharp-bilinear-2x-prescale.slangp"
+
+[[shaders]]
+name = "Opera"
+shader = "interpolation/bilinear.slangp"
+
 
 [[playlists]]
 name = "Atari - 2600.lpl"

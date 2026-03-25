@@ -274,3 +274,52 @@ def test_build_preview_plan_uses_local_only_thumbnail_preview_by_default(tmp_pat
 
     assert all(row.operation == "inspect" for row in plan.rows)
     assert all("deferred until run" in row.details for row in plan.rows)
+
+
+def test_build_preview_plan_emits_shader_rows_with_copy_skip_overwrite(tmp_path):
+    dest_base = tmp_path / "retroarch"
+    existing_dir = dest_base / "config" / "ExistingCore"
+    changed_dir = dest_base / "config" / "ChangedCore"
+    existing_dir.mkdir(parents=True)
+    changed_dir.mkdir(parents=True)
+
+    (existing_dir / "ExistingCore.slangp").write_text(
+        '#reference "../../shaders/shaders_slang/crt/guest.slangp"\n',
+        encoding="utf-8",
+    )
+    (changed_dir / "ChangedCore.slangp").write_text(
+        '#reference "../../shaders/shaders_slang/old/path.slangp"\n',
+        encoding="utf-8",
+    )
+
+    default = {
+        "transport": "filesystem",
+        "dest_retroarch_base": str(dest_base),
+        "_shaders": [
+            {"name": "NewCore", "shader": "crt/new.slangp"},
+            {"name": "ExistingCore", "shader": "crt/guest.slangp"},
+            {"name": "ChangedCore", "shader": "crt/updated.slangp"},
+        ],
+    }
+    run_cfg = build_run_config(
+        do_sync_playlists=False,
+        do_sync_bios=False,
+        do_sync_favorites=False,
+        do_sync_thumbnails=False,
+        do_sync_roms=False,
+        do_sync_shaders=True,
+        do_update_playlists=False,
+        do_update_thumbnails=False,
+        dry_run=True,
+        do_debug=False,
+    )
+
+    plan = build_preview_plan(default=default, playlists=[], run_cfg=run_cfg)
+
+    operations = {Path(row.destination).name: row.operation for row in plan.rows}
+    assert operations["NewCore.slangp"] == "copy"
+    assert operations["ExistingCore.slangp"] == "skip"
+    assert operations["ChangedCore.slangp"] == "overwrite"
+    assert plan.planned_copies == 1
+    assert plan.planned_skips == 1
+    assert plan.planned_overwrites == 1

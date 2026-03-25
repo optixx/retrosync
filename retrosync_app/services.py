@@ -212,6 +212,9 @@ def build_preview_plan(
             )
         )
 
+    if run_cfg.do_sync_shaders:
+        rows.extend(_plan_shader_sync_rows(default=default, capabilities=capabilities))
+
     for playlist in playlists:
         system = Path(str(playlist.get("name", ""))).stem
 
@@ -337,6 +340,37 @@ def _plan_recursive_copy(*, action, system, src_root, dest_root, default, capabi
     return rows
 
 
+def _plan_shader_sync_rows(*, default, capabilities):
+    dst_base = default.get("dest_retroarch_base")
+    if not dst_base:
+        return []
+    rows = []
+    for shader in default.get("_shaders", []):
+        core_name = str(shader.get("name", "")).strip()
+        shader_file = str(shader.get("shader", "")).strip()
+        if not core_name or not shader_file:
+            continue
+        content = f'#reference "../../shaders/shaders_slang/{shader_file}"\n'
+        destination = Path(dst_base) / "config" / core_name / f"{core_name}.slangp"
+        rows.append(
+            PreviewPlanRow(
+                action="sync_shaders",
+                operation=_classify_generated_sync_operation(
+                    destination,
+                    content,
+                    default=default,
+                    capabilities=capabilities,
+                ),
+                system="Global",
+                source=shader_file,
+                destination=str(destination),
+                size_bytes=len(content.encode("utf-8")),
+                details=f"Generate shader preset for core '{core_name}'.",
+            )
+        )
+    return rows
+
+
 def _matches_exclude(part):
     from fnmatch import fnmatch
 
@@ -403,6 +437,21 @@ def _classify_sync_operation(src, dest, *, default, capabilities):
     if capabilities.preserves_mtime and src_stat.st_size == dest_stat.st_size:
         if int(src_stat.st_mtime) <= int(dest_stat.st_mtime):
             return "skip"
+    return "overwrite"
+
+
+def _classify_generated_sync_operation(dest, content, *, default, capabilities):
+    _ = capabilities
+    if get_transport_mode(default) != "filesystem":
+        return "copy"
+    dest_path = Path(dest)
+    if not dest_path.exists():
+        return "copy"
+    try:
+        if dest_path.read_text(encoding="utf-8") == content:
+            return "skip"
+    except OSError:
+        return "copy"
     return "overwrite"
 
 

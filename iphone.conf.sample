@@ -22,6 +22,34 @@ url = "http://192.168.1.100"
 username = ""
 password = ""
 
+[[shaders]]
+name = "Atari - 2600 (Stella)"
+shader = "crt/crt-easymode.slangp"
+
+[[shaders]]
+name = "Arcade (FinalBurn Neo)"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Nintendo - NES / Famicom (Mesen)"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Nintendo - SNES / SFC (Snes9x)"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Nintendo - Game Boy Advance (mGBA)"
+shader = "handheld/lcd-grid-v2.slangp"
+
+[[shaders]]
+name = "Sony - PlayStation (Beetle PSX)"
+shader = "crt/crt-guest-advanced.slangp"
+
+[[shaders]]
+name = "Commodore - Amiga (PUAE)"
+shader = "crt/crt-guest-advanced.slangp"
+
 
 [[playlists]]
 name = "Atari - 2600.lpl"

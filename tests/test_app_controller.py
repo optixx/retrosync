@@ -186,6 +186,7 @@ def test_controller_persists_last_config_and_selected_actions(tmp_path):
     )
     controller.set_config_path("saved.conf")
     controller.set_action("do_sync_roms", True)
+    controller.set_action("do_sync_shaders", True)
     controller.set_action("do_update_thumbnails", True)
     controller.set_action("do_debug", True)
 
@@ -197,5 +198,6 @@ def test_controller_persists_last_config_and_selected_actions(tmp_path):
 
     assert state.config_path == "saved.conf"
     assert state.run_setup.do_sync_roms is True
+    assert state.run_setup.do_sync_shaders is True
     assert state.run_setup.do_update_thumbnails is True
     assert state.run_setup.do_debug is True
