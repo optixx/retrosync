@@ -2,7 +2,7 @@
 
 __author__ = "Optixx"
 __license__ = "MIT"
-__version__ = "0.1.0"
+__version__ = "2.0.0"
 __maintainer__ = "David Voswinkel"
 __email__ = "david@optixx.org"
 
@@ -150,7 +150,7 @@ def count_playlist_roms(default, playlist):
 
     src_roots = default.get("src_roms", [])
     if not src_roots:
-        return 0, [], []
+        return 0, 0, [], []
 
     count = 0
     total_size = 0
