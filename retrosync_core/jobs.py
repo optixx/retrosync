@@ -46,7 +46,19 @@ class TitleFeatures:
 
 
 class JobBase:
-    pass
+    def _thumbnail_system_name(self):
+        playlist = getattr(self, "playlist", {}) or {}
+        configured = str(playlist.get("thumbnail_system", "")).strip()
+        if configured:
+            return configured
+        return Path(playlist.get("name", "")).stem
+
+    def _thumbnail_db_name(self):
+        playlist = getattr(self, "playlist", {}) or {}
+        configured = str(playlist.get("thumbnail_db_name", "")).strip()
+        if configured:
+            return configured
+        return str(playlist.get("name", "")).strip()
 
 
 class GlobalJob(JobBase):
@@ -157,7 +169,7 @@ class ThumbnailsSync(JobBase):
 
     def setup(self, playlist):
         self.playlist = playlist
-        system_name = Path(self.playlist.get("name", "")).stem
+        system_name = self._thumbnail_system_name()
         self.src = Path(self.default.get("src_thumbnails")) / system_name
         self.dst = Path(self.default.get("dest_thumbnails")) / system_name
         if not self.src.is_dir():
@@ -341,10 +353,12 @@ class PlaylistSyncJob(SystemJob):
         items = []
         src_items = data["items"]
         src_items_len = len(src_items)
+        thumbnail_db_name = self._thumbnail_db_name()
         for idx, item in enumerate(src_items):
             new_item = copy.copy(item)
             new_item["core_name"] = "DETECT"
             new_item["core_path"] = "DETECT"
+            new_item["db_name"] = thumbnail_db_name
             src_path = new_item["path"].split("#")[0]
             src_name = Path(src_path).name
             logger.debug(f"migrate_playlist: Convert [{idx + 1}/{src_items_len}] path={src_name}")
@@ -443,7 +457,7 @@ class PlaylistUpdateJob(SystemJob):
         default_label = self.name_map.get(stem, stem)
         default_label = self.resolve_special_playlist_label(file, default_label)
         new_item["label"] = self.resolve_thumbnail_label(stem, default_label)
-        new_item["db_name"] = local.name
+        new_item["db_name"] = self._thumbnail_db_name() or local.name
         return new_item
 
     def resolve_special_playlist_label(self, file, default_label):
@@ -686,7 +700,7 @@ class PlaylistUpdateJob(SystemJob):
         if not src_thumbnails:
             return self.build_thumbnail_index_from_names([])
 
-        system_name = Path(self.playlist.get("name")).stem
+        system_name = self._thumbnail_system_name()
         system_dir = Path(src_thumbnails) / system_name
         if not system_dir.is_dir():
             return self.build_thumbnail_index_from_names([])
@@ -1409,7 +1423,7 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
             for entry in self._parse_directory_listing(root_url)
             if entry["is_dir"] and entry["name"] != ".."
         }
-        system_name = Path(self.playlist.get("name", "")).stem
+        system_name = self._thumbnail_system_name()
 
         if system_name in remote_dirs:
             return system_name, remote_dirs[system_name]
@@ -1491,7 +1505,7 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
         src_thumbnails = self.default.get("src_thumbnails")
         if not src_thumbnails:
             return False
-        system_name = Path(self.playlist.get("name", "")).stem
+        system_name = self._thumbnail_system_name()
         asset_dir = Path(src_thumbnails) / system_name / folder_name
         if not asset_dir.is_dir():
             return False
@@ -1510,7 +1524,7 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
         src_thumbnails = self.default.get("src_thumbnails")
         if not src_thumbnails:
             return False
-        system_name = Path(self.playlist.get("name", "")).stem
+        system_name = self._thumbnail_system_name()
         asset_dir = Path(src_thumbnails) / system_name / folder_name
         asset_dir.mkdir(parents=True, exist_ok=True)
         ext = asset_info.get("ext", ".png")
@@ -1598,6 +1612,7 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
         playlist_path, playlist_doc = self._load_playlist_document()
         items = playlist_doc.get("items", [])
         changed = False
+        thumbnail_db_name = self._thumbnail_db_name()
         for row in rows:
             if cancel_check and cancel_check():
                 raise TransportError("Transfer interrupted by user.")
@@ -1621,6 +1636,9 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
                 if item.get("label") != matched_name:
                     item["label"] = matched_name
                     changed = True
+                if thumbnail_db_name and item.get("db_name") != thumbnail_db_name:
+                    item["db_name"] = thumbnail_db_name
+                    changed = True
             row["local_present"] = self._has_local_asset(
                 matched_name, self.ASSET_FOLDERS["boxart"]
             ) or bool(row["asset_urls"].get("boxart"))
@@ -1634,7 +1652,7 @@ class ThumbnailsUpdateJob(PlaylistUpdateJob):
             if not self._should_apply_row(row):
                 continue
             matched_name = row["thumbnail"]
-            system_name = Path(self.playlist.get("name", "")).stem
+            system_name = self._thumbnail_system_name()
             for folder_key, folder_name in self.ASSET_FOLDERS.items():
                 asset_info = row["asset_urls"].get(folder_key)
                 if not asset_info:

@@ -77,6 +77,60 @@ def test_playlist_migrate_rewrites_paths_from_all_src_rom_roots(tmp_path):
     assert migrated["items"][1]["path"] == "/target/roms/NES/Contra.zip"
     assert migrated["items"][0]["core_name"] == "DETECT"
     assert migrated["items"][1]["core_path"] == "DETECT"
+    assert migrated["items"][0]["db_name"] == playlist_name
+    assert migrated["items"][1]["db_name"] == playlist_name
+
+
+def test_playlist_migrate_uses_thumbnail_db_name_override(tmp_path):
+    src_playlists = tmp_path / "playlists"
+    src_playlists.mkdir()
+    playlist_name = "Arcade - FBNeo.lpl"
+
+    playlist_data = {
+        "version": "1.5",
+        "default_core_path": "/src/cores/fbneo_libretro.dylib",
+        "default_core_name": "Arcade (FinalBurn Neo)",
+        "scan_content_dir": "",
+        "scan_dat_file_path": "",
+        "items": [
+            {
+                "path": "/roms-primary/Arcade - FBNeo/1942.zip",
+                "label": "1942",
+                "core_path": "DETECT",
+                "core_name": "DETECT",
+                "crc32": "|crc",
+                "db_name": playlist_name,
+            }
+        ],
+    }
+
+    (src_playlists / playlist_name).write_text(json.dumps(playlist_data), encoding="utf-8")
+
+    default_config = {
+        "src_playlists": str(src_playlists),
+        "src_roms": ["/roms-primary"],
+        "target_roms": "/target/roms",
+        "src_cores": "/src/cores",
+        "target_cores": "/target/cores",
+        "src_cores_suffix": ".dylib",
+        "target_cores_suffix": ".so",
+    }
+    playlist = {
+        "name": playlist_name,
+        "src_folder": "Arcade - FBNeo",
+        "dest_folder": "Arcade - FBNeo",
+        "thumbnail_db_name": "FBNeo - Arcade Games.lpl",
+    }
+
+    job = PlaylistSyncJob(default_config, transport=None)
+    job.setup(playlist)
+
+    with tempfile.NamedTemporaryFile() as temp_file:
+        job.migrate_playlist(temp_file)
+        temp_file.seek(0)
+        migrated = json.loads(temp_file.read().decode("utf-8"))
+
+    assert migrated["items"][0]["db_name"] == "FBNeo - Arcade Games.lpl"
 
 
 def test_playlist_sync_do_calls_callback_once(tmp_path):
@@ -201,6 +255,62 @@ def test_playlist_update_prefers_thumbnail_label_match(tmp_path):
     updated = json.loads(playlist_file.read_text(encoding="utf-8"))
     assert updated["items"][0]["path"].endswith("Super Mario Bros (USA).zip")
     assert updated["items"][0]["label"] == "Super Mario Bros"
+    assert updated["items"][0]["db_name"] == playlist_name
+
+
+def test_playlist_update_uses_thumbnail_db_name_override(tmp_path):
+    src_playlists = tmp_path / "playlists"
+    src_playlists.mkdir()
+    src_roms = tmp_path / "roms"
+    src_roms.mkdir()
+    (src_roms / "1942.zip").write_text("rom", encoding="utf-8")
+
+    src_thumbnails = tmp_path / "thumbnails"
+    (src_thumbnails / "FBNeo - Arcade Games" / "Named_Boxarts").mkdir(parents=True)
+    (src_thumbnails / "FBNeo - Arcade Games" / "Named_Boxarts" / "1942.png").write_text(
+        "img", encoding="utf-8"
+    )
+
+    playlist_name = "Arcade - FBNeo.lpl"
+    playlist_file = src_playlists / playlist_name
+    playlist_file.write_text(
+        json.dumps(
+            {
+                "default_core_path": "",
+                "default_core_name": "",
+                "scan_content_dir": "",
+                "scan_dat_file_path": "",
+                "items": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    transport = Mock()
+    transport.dry_run = False
+    default_config = {
+        "src_playlists": str(src_playlists),
+        "src_roms": [str(src_roms)],
+        "src_thumbnails": str(src_thumbnails),
+        "src_cores": "/cores",
+        "src_cores_suffix": ".so",
+    }
+    playlist = {
+        "name": playlist_name,
+        "src_folder": "",
+        "src_core_path": "test_core",
+        "src_core_name": "Test Core",
+        "thumbnail_system": "FBNeo - Arcade Games",
+        "thumbnail_db_name": "FBNeo - Arcade Games.lpl",
+    }
+
+    job = PlaylistUpdatecJob(default_config, transport=transport)
+    job.setup(playlist)
+    job.do()
+
+    updated = json.loads(playlist_file.read_text(encoding="utf-8"))
+    assert updated["items"][0]["label"] == "1942"
+    assert updated["items"][0]["db_name"] == "FBNeo - Arcade Games.lpl"
 
 
 def test_playlist_update_can_keep_default_label(tmp_path):
@@ -684,6 +794,68 @@ def test_update_thumbnails_apply_downloads_assets_and_rewrites_label(tmp_path):
     ).read_bytes() == b"snap"
 
 
+def test_update_thumbnails_apply_rewrites_thumbnail_db_name_override(tmp_path):
+    src_playlists = tmp_path / "playlists"
+    src_playlists.mkdir()
+    src_thumbnails = tmp_path / "thumbnails"
+    playlist_name = "Capcom - CPS1.lpl"
+    playlist_file = src_playlists / playlist_name
+    playlist_file.write_text(
+        json.dumps(
+            {
+                "items": [
+                    {
+                        "path": "/roms/Capcom - CPS1/1941.zip",
+                        "label": "1941 - Counter Attack (900227 World)",
+                        "db_name": "Capcom - CPS1.lpl",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    default_config = {
+        "src_playlists": str(src_playlists),
+        "src_thumbnails": str(src_thumbnails),
+        "thumbnail_url": "https://thumbnails.libretro.com/",
+        "_update_thumbnails_apply": True,
+        "_thumbnail_cache_dir": str(tmp_path / ".cache" / "retrosync" / "thumbnail-index"),
+    }
+    playlist = {
+        "name": playlist_name,
+        "src_folder": "Capcom - CPS1",
+        "dest_folder": "Capcom - CPS1",
+        "thumbnail_system": "FBNeo - Arcade Games",
+        "thumbnail_db_name": "FBNeo - Arcade Games.lpl",
+    }
+
+    transport = Mock()
+    transport.dry_run = False
+    job = ThumbnailsUpdateJob(default_config, transport=transport)
+    job.setup(playlist)
+    rows = [
+        {
+            "item_index": 0,
+            "system": "Capcom - CPS1",
+            "remote_system": "FBNeo - Arcade Games",
+            "rom": "1941.zip",
+            "label": "1941 - Counter Attack (900227 World)",
+            "thumbnail": "1941 - Counter Attack (900227 World)",
+            "match_type": "exact",
+            "score": 120,
+            "local_present": False,
+            "asset_urls": {"boxart": None, "title": None, "snap": None},
+            "url": "",
+        }
+    ]
+
+    job.apply_rows(rows)
+
+    updated = json.loads(playlist_file.read_text(encoding="utf-8"))
+    assert updated["items"][0]["db_name"] == "FBNeo - Arcade Games.lpl"
+
+
 def test_update_thumbnails_reports_progress_for_search_and_apply(tmp_path):
     src_playlists = tmp_path / "playlists"
     src_playlists.mkdir()
@@ -1162,3 +1334,33 @@ def test_update_thumbnails_uses_system_title_equivalents_for_32x(tmp_path):
         )["matched"]
         == "Stellar Assault (Japan)"
     )
+
+
+def test_update_thumbnails_uses_thumbnail_system_override_for_remote_lookup(tmp_path):
+    default_config = {
+        "src_playlists": str(tmp_path),
+        "thumbnail_url": "https://thumbnails.libretro.com/",
+        "_thumbnail_cache_dir": str(tmp_path / ".cache" / "retrosync" / "thumbnail-index"),
+    }
+    playlist = {
+        "name": "Arcade - FBNeo.lpl",
+        "src_folder": "Arcade - FBNeo",
+        "dest_folder": "Arcade - FBNeo",
+        "thumbnail_system": "FBNeo - Arcade Games",
+    }
+    job = ThumbnailsUpdateJob(default_config, transport=Mock())
+    job.setup(playlist)
+    job._parse_directory_listing = Mock(
+        return_value=[
+            {
+                "name": "FBNeo - Arcade Games",
+                "url": "https://thumbnails.libretro.com/FBNeo%20-%20Arcade%20Games/",
+                "is_dir": True,
+            }
+        ]
+    )
+
+    resolved_name, system_url = job._resolve_remote_system_dir()
+
+    assert resolved_name == "FBNeo - Arcade Games"
+    assert system_url == "https://thumbnails.libretro.com/FBNeo%20-%20Arcade%20Games/"

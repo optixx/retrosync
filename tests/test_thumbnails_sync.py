@@ -119,3 +119,21 @@ def test_thumbnails_sync_missing_system_is_noop(tmp_path, default_config, dry_ru
     assert thumbnails_sync.size == 0
     assert thumbnails_sync.transfer_bytes == 0
     mock_copy_files.assert_not_called()
+
+
+def test_thumbnails_sync_uses_thumbnail_system_override(tmp_path, default_config, dry_run):
+    system_dir = tmp_path / "FBNeo - Arcade Games" / "Named_Boxarts"
+    system_dir.mkdir(parents=True)
+    (system_dir / "1942.png").write_bytes(b"img")
+    default_config["src_thumbnails"] = str(tmp_path)
+    default_config["dest_thumbnails"] = str(tmp_path / "dest")
+    transport = TransportSSHUnix(default_config, dry_run)
+    thumbnails_sync = ThumbnailsSync(default_config, transport)
+
+    thumbnails_sync.setup(
+        {"name": "Arcade - FBNeo.lpl", "thumbnail_system": "FBNeo - Arcade Games"}
+    )
+
+    assert thumbnails_sync.src == tmp_path / "FBNeo - Arcade Games"
+    assert thumbnails_sync.dst == tmp_path / "dest" / "FBNeo - Arcade Games"
+    assert thumbnails_sync.size == transport.guess_file_count(thumbnails_sync.src, [], True)
