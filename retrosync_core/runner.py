@@ -21,6 +21,48 @@ from .transports import TransportError
 
 logger = logging.getLogger(__name__)
 
+ACTION_SYNC_PLAYLISTS = "sync_playlists"
+ACTION_SYNC_BIOS = "sync_bios"
+ACTION_SYNC_FAVORITES = "sync_favorites"
+ACTION_SYNC_THUMBNAILS = "sync_thumbnails"
+ACTION_SYNC_ROMS = "sync_roms"
+ACTION_SYNC_SHADERS = "sync_shaders"
+ACTION_UPDATE_PLAYLISTS = "update_playlists"
+ACTION_UPDATE_THUMBNAILS = "update_thumbnails"
+
+ALL_ACTIONS = frozenset(
+    {
+        ACTION_SYNC_PLAYLISTS,
+        ACTION_SYNC_BIOS,
+        ACTION_SYNC_FAVORITES,
+        ACTION_SYNC_THUMBNAILS,
+        ACTION_SYNC_ROMS,
+        ACTION_SYNC_SHADERS,
+        ACTION_UPDATE_PLAYLISTS,
+        ACTION_UPDATE_THUMBNAILS,
+    }
+)
+SYNC_ACTIONS = frozenset(
+    {
+        ACTION_SYNC_PLAYLISTS,
+        ACTION_SYNC_BIOS,
+        ACTION_SYNC_FAVORITES,
+        ACTION_SYNC_THUMBNAILS,
+        ACTION_SYNC_ROMS,
+        ACTION_SYNC_SHADERS,
+    }
+)
+UPDATE_ACTIONS = frozenset({ACTION_UPDATE_PLAYLISTS, ACTION_UPDATE_THUMBNAILS})
+SYSTEM_ACTIONS = frozenset(
+    {
+        ACTION_SYNC_THUMBNAILS,
+        ACTION_UPDATE_PLAYLISTS,
+        ACTION_UPDATE_THUMBNAILS,
+        ACTION_SYNC_PLAYLISTS,
+        ACTION_SYNC_ROMS,
+    }
+)
+
 
 def format_transfer_size(num_bytes):
     gib = 1024**3
@@ -30,18 +72,89 @@ def format_transfer_size(num_bytes):
     return f"{num_bytes / mib:.2f} MB"
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, init=False)
 class SyncRunConfig:
-    do_sync_playlists: bool
-    do_sync_bios: bool
-    do_sync_favorites: bool
-    do_sync_thumbnails: bool
-    do_sync_roms: bool
-    do_sync_shaders: bool
-    do_update_playlists: bool
-    do_update_thumbnails: bool
+    actions: frozenset[str]
     dry_run: bool = False
     do_debug: bool = False
+
+    def __init__(
+        self,
+        *,
+        actions=None,
+        do_sync_playlists=False,
+        do_sync_bios=False,
+        do_sync_favorites=False,
+        do_sync_thumbnails=False,
+        do_sync_roms=False,
+        do_sync_shaders=False,
+        do_update_playlists=False,
+        do_update_thumbnails=False,
+        dry_run=False,
+        do_debug=False,
+    ):
+        normalized_actions = {str(action) for action in (actions or [])}
+        if do_sync_playlists:
+            normalized_actions.add(ACTION_SYNC_PLAYLISTS)
+        if do_sync_bios:
+            normalized_actions.add(ACTION_SYNC_BIOS)
+        if do_sync_favorites:
+            normalized_actions.add(ACTION_SYNC_FAVORITES)
+        if do_sync_thumbnails:
+            normalized_actions.add(ACTION_SYNC_THUMBNAILS)
+        if do_sync_roms:
+            normalized_actions.add(ACTION_SYNC_ROMS)
+        if do_sync_shaders:
+            normalized_actions.add(ACTION_SYNC_SHADERS)
+        if do_update_playlists:
+            normalized_actions.add(ACTION_UPDATE_PLAYLISTS)
+        if do_update_thumbnails:
+            normalized_actions.add(ACTION_UPDATE_THUMBNAILS)
+        unknown_actions = normalized_actions - ALL_ACTIONS
+        if unknown_actions:
+            raise ValueError(f"Unknown run actions: {', '.join(sorted(unknown_actions))}")
+
+        object.__setattr__(self, "actions", frozenset(normalized_actions))
+        object.__setattr__(self, "dry_run", bool(dry_run))
+        object.__setattr__(self, "do_debug", bool(do_debug))
+
+    def includes(self, action):
+        return action in self.actions
+
+    def has_any(self, actions):
+        return any(action in self.actions for action in actions)
+
+    @property
+    def do_sync_playlists(self):
+        return self.includes(ACTION_SYNC_PLAYLISTS)
+
+    @property
+    def do_sync_bios(self):
+        return self.includes(ACTION_SYNC_BIOS)
+
+    @property
+    def do_sync_favorites(self):
+        return self.includes(ACTION_SYNC_FAVORITES)
+
+    @property
+    def do_sync_thumbnails(self):
+        return self.includes(ACTION_SYNC_THUMBNAILS)
+
+    @property
+    def do_sync_roms(self):
+        return self.includes(ACTION_SYNC_ROMS)
+
+    @property
+    def do_sync_shaders(self):
+        return self.includes(ACTION_SYNC_SHADERS)
+
+    @property
+    def do_update_playlists(self):
+        return self.includes(ACTION_UPDATE_PLAYLISTS)
+
+    @property
+    def do_update_thumbnails(self):
+        return self.includes(ACTION_UPDATE_THUMBNAILS)
 
 
 @dataclass(frozen=True)
@@ -174,33 +287,33 @@ class SyncRunner:
         deferred_output_messages = []
         final_deferred_output_messages = []
         jobs = []
-        if cfg.do_sync_bios:
+        if cfg.includes(ACTION_SYNC_BIOS):
             jobs.append(self.job_registry.bios_sync(self.default, self.playlists, self.transport))
 
-        if cfg.do_sync_favorites:
+        if cfg.includes(ACTION_SYNC_FAVORITES):
             jobs.append(
                 self.job_registry.favorites_sync(self.default, self.playlists, self.transport)
             )
 
-        if cfg.do_sync_shaders:
+        if cfg.includes(ACTION_SYNC_SHADERS):
             jobs.append(self.job_registry.shader_sync(self.default, self.playlists, self.transport))
 
         system_jobs = []
-        if cfg.do_sync_thumbnails:
+        if cfg.includes(ACTION_SYNC_THUMBNAILS):
             system_jobs.append(self.job_registry.thumbnails_sync(self.default, self.transport))
 
-        if cfg.do_update_playlists:
+        if cfg.includes(ACTION_UPDATE_PLAYLISTS):
             system_jobs.append(self.job_registry.playlist_update_job(self.default, self.transport))
 
-        if cfg.do_update_thumbnails:
+        if cfg.includes(ACTION_UPDATE_THUMBNAILS):
             system_jobs.append(
                 self.job_registry.thumbnails_update_job(self.default, self.transport)
             )
 
-        if cfg.do_sync_playlists:
+        if cfg.includes(ACTION_SYNC_PLAYLISTS):
             system_jobs.append(self.job_registry.playlist_sync_job(self.default, self.transport))
 
-        if cfg.do_sync_roms:
+        if cfg.includes(ACTION_SYNC_ROMS):
             system_jobs.append(self.job_registry.rom_sync_job(self.default, self.transport))
 
         playlists = self.playlists
@@ -317,13 +430,7 @@ class SyncRunner:
                 ),
             )
 
-            if (
-                cfg.do_update_playlists
-                or cfg.do_update_thumbnails
-                or cfg.do_sync_thumbnails
-                or cfg.do_sync_playlists
-                or cfg.do_sync_roms
-            ):
+            if cfg.has_any(SYSTEM_ACTIONS):
                 for idx, key in enumerate(systems.keys()):
                     self._raise_if_cancelled(cancel_token)
                     name = systems[key]["name"]

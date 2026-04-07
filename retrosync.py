@@ -11,6 +11,8 @@ import logging
 import os
 import re
 import sys
+from dataclasses import dataclass
+from functools import wraps
 from pathlib import Path
 
 import click
@@ -48,7 +50,22 @@ from retrosync_core.paths import (
     normalize_webdav_remote_path,
     retroarch_derived_paths,
 )
-from retrosync_core.runner import JobRegistry, SyncAbortError, SyncRunner
+from retrosync_core.runner import (
+    ACTION_SYNC_BIOS,
+    ACTION_SYNC_FAVORITES,
+    ACTION_SYNC_PLAYLISTS,
+    ACTION_SYNC_ROMS,
+    ACTION_SYNC_SHADERS,
+    ACTION_SYNC_THUMBNAILS,
+    ACTION_UPDATE_PLAYLISTS,
+    ACTION_UPDATE_THUMBNAILS,
+    ALL_ACTIONS,
+    JobRegistry,
+    SYNC_ACTIONS,
+    SyncAbortError,
+    SyncRunner,
+    UPDATE_ACTIONS,
+)
 from retrosync_core.transports import (
     GLOBAL_EXCLUDE_PATTERNS,
     TransportBase,
@@ -278,164 +295,92 @@ class CliRichReporter:
         print(message)
 
 
-@click.command()
-@click.option(
-    "--gui",
-    "do_gui",
-    is_flag=True,
-    help="Launch the GUI",
-)
-@click.option(
-    "--all",
-    "-a",
-    "do_all",
-    is_flag=True,
-    help="Sync all files (ROMs, playlists, favorites, BIOS files, thumbnails and shaders)",
-)
-@click.option(
-    "--sync-playlists",
-    "-p",
-    "do_sync_playlists",
-    is_flag=True,
-    help="Sync playlist files",
-)
-@click.option(
-    "--sync-bios", "-b", "do_sync_bios", is_flag=True, help="Sync BIOS files to target system"
-)
-@click.option(
-    "--sync-favorites",
-    "-f",
-    "do_sync_favorites",
-    is_flag=True,
-    help="Sync sync favorites files  to target system",
-)
-@click.option(
-    "--sync-thumbnails",
-    "-t",
-    "do_sync_thumbails",
-    is_flag=True,
-    help="Sync thumbnails files",
-)
-@click.option(
-    "--sync-roms", "-r", "do_sync_roms", is_flag=True, help="Sync ROMs files to target system"
-)
-@click.option(
-    "--sync-shaders",
-    "-s",
-    "do_sync_shaders",
-    is_flag=True,
-    help="Sync local shader presets for configured cores",
-)
-@click.option(
-    "--update-playlists",
-    "-u",
-    "do_update_playlists",
-    is_flag=True,
-    help="Update local playlist files by scanning the ROM directories for results",
-)
-@click.option(
-    "--update-thumbnails",
-    "do_update_thumbnails",
-    is_flag=True,
-    help="Update local thumbnails for configured playlists",
-)
-@click.option(
-    "--apply",
-    "apply_changes",
-    is_flag=True,
-    help="Apply local changes for update-thumbnails by downloading assets and rewriting labels",
-)
-@click.option(
-    "--refresh-thumbnail-cache",
-    "refresh_thumbnail_cache",
-    is_flag=True,
-    help="Ignore cached remote thumbnail directory listings and fetch fresh ones",
-)
-@click.option(
-    "--no-thumbnail-cache",
-    "no_thumbnail_cache",
-    is_flag=True,
-    help="Disable reading and writing the local thumbnail directory cache for this run",
-)
-@click.option(
-    "--playlist-list",
-    "do_playlist_list",
-    is_flag=True,
-    help="List configured playlists with source ROM counts",
-)
-@click.option(
-    "--name",
-    "-n",
-    "system_name",
-    default=None,
-    help="Filter and process only one specific system",
-)
-@click.option(
-    "--config-file",
-    "-c",
-    "config_file",
-    default="steamdeck.conf",
-    help="Use config file",
-)
-@click.option(
-    "--transport",
-    "transport_override",
-    type=click.Choice(["filesystem", "ssh", "webdav"], case_sensitive=False),
-    default=None,
-    help="Override transport mode from config (filesystem, ssh, webdav)",
-)
-@click.option("--dry-run", "-D", is_flag=True, help="Dry run, don't sync or create anything")
-@click.option(
-    "--debug",
-    "-d",
-    "do_debug",
-    is_flag=True,
-    help="Enable debug logging to debug.log logfile",
-)
-@click.option(
-    "--transport-unix",
-    "force_transport",
-    flag_value="unix",
-    default=False,
-    help="Compel usage of scp and rsync command-line utilities (faster)",
-)
-@click.option(
-    "--transport-windows",
-    "force_transport",
-    flag_value="windows",
-    default=False,
-    help="Utilize Python's implementation of the SSH transport (slower)",
-)
-@click.option("--yes", is_flag=True, help="Skip prompt inputs by saying yes to everything")
-def main(
-    do_gui,
-    do_all,
-    do_sync_playlists,
-    do_sync_bios,
-    do_sync_favorites,
-    do_sync_thumbails,
-    do_sync_roms,
-    do_sync_shaders,
-    do_update_playlists,
-    do_update_thumbnails,
-    apply_changes,
-    refresh_thumbnail_cache,
-    no_thumbnail_cache,
-    do_playlist_list,
-    system_name,
-    config_file,
-    transport_override,
-    dry_run,
-    do_debug,
-    force_transport,
-    yes,
-):
+@dataclass(frozen=True)
+class CliRuntimeOptions:
+    config_file: str
+    transport_override: str | None
+    transport_impl: str
+    yes: bool
+    do_debug: bool
+
+
+def common_runtime_options(command):
+    @click.option(
+        "--config-file",
+        "-c",
+        default="steamdeck.conf",
+        help="Use config file",
+    )
+    @click.option(
+        "--transport",
+        "transport_override",
+        type=click.Choice(["filesystem", "ssh", "webdav"], case_sensitive=False),
+        default=None,
+        help="Override transport mode from config (filesystem, ssh, webdav)",
+    )
+    @click.option(
+        "--transport-impl",
+        type=click.Choice(["auto", "unix", "windows"], case_sensitive=False),
+        default="auto",
+        help="Override transport implementation selection (auto, unix, windows)",
+    )
+    @click.option("--yes", is_flag=True, help="Skip prompt inputs by saying yes to everything")
+    @click.option(
+        "--debug",
+        "-d",
+        "do_debug",
+        is_flag=True,
+        help="Enable debug logging to debug.log logfile",
+    )
+    @wraps(command)
+    def wrapper(*args, **kwargs):
+        return command(*args, **kwargs)
+
+    return wrapper
+
+
+def selection_options(command):
+    @click.option(
+        "--system",
+        "-n",
+        "system_name",
+        default=None,
+        help="Filter and process only one specific system",
+    )
+    @click.option("--dry-run", "-D", is_flag=True, help="Dry run, don't sync or create anything")
+    @wraps(command)
+    def wrapper(*args, **kwargs):
+        return command(*args, **kwargs)
+
+    return wrapper
+
+
+def thumbnail_update_options(command):
+    @click.option(
+        "--apply",
+        "apply_changes",
+        is_flag=True,
+        help="Download matched assets and rewrite labels during thumbnail updates",
+    )
+    @click.option(
+        "--refresh-thumbnail-cache",
+        is_flag=True,
+        help="Ignore cached remote thumbnail directory listings and fetch fresh ones",
+    )
+    @click.option(
+        "--no-thumbnail-cache",
+        is_flag=True,
+        help="Disable reading and writing the local thumbnail directory cache for this run",
+    )
+    @wraps(command)
+    def wrapper(*args, **kwargs):
+        return command(*args, **kwargs)
+
+    return wrapper
+
+
+def configure_logging(do_debug):
     global logger
-
-    if do_gui:
-        launch_gui()
-        sys.exit(0)
-
     if do_debug:
         logging.basicConfig(
             filename="debug.log",
@@ -444,127 +389,320 @@ def main(
             format="%(asctime)s - %(levelname)s - %(message)s",
         )
         logger = logging.getLogger()
-    else:
-        logging.basicConfig(
-            level=logging.WARN,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-        )
-        logger = logging.getLogger()
-        logger.disabled = True
+        return
+    logging.basicConfig(
+        level=logging.WARN,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+    )
+    logger = logging.getLogger()
+    logger.disabled = True
 
-    if do_all:
-        do_sync_playlists = do_sync_roms = do_sync_bios = do_sync_favorites = do_sync_thumbails = (
-            do_update_playlists
-        ) = do_update_thumbnails = do_sync_shaders = True
 
-    if not any(
-        [
-            do_sync_playlists,
-            do_sync_roms,
-            do_sync_bios,
-            do_sync_favorites,
-            do_sync_thumbails,
-            do_update_playlists,
-            do_update_thumbnails,
-            do_sync_shaders,
-            do_playlist_list,
-        ]
-    ):
-        click.echo(click.get_current_context().get_help())
-        sys.exit(0)
+def transport_impl_to_force_transport(transport_impl):
+    normalized = str(transport_impl).strip().lower()
+    return False if normalized in ("", "auto", "false") else normalized
 
-    try:
-        context = load_runtime_context(
-            config_loader=toml.load,
-            config_file=config_file,
-            transport_override=transport_override,
-            apply_changes=apply_changes,
-            refresh_thumbnail_cache=refresh_thumbnail_cache,
-            no_thumbnail_cache=no_thumbnail_cache,
-        )
-        default = context.default
-        playlists = context.playlists
-    except ValueError as exc:
-        print(str(exc))
-        sys.exit(-1)
 
-    if system_name:
-        matches = rank_system_matches(system_name, playlists)
-        if not matches:
-            print(f"No playlist match found for '{system_name}'.")
-            sys.exit(-1)
-        if yes:
-            system_name = matches[0]
-        else:
-            print(f"Select a playlist match for '{system_name}':")
-            for idx, match in enumerate(matches, start=1):
-                print(f"{idx}. {match}")
-            print("0. Cancel")
-            selected = click.prompt(
-                "Enter selection number",
-                type=click.IntRange(0, len(matches)),
-            )
-            if selected == 0:
-                sys.exit(-1)
-            system_name = matches[selected - 1]
+def load_cli_runtime(
+    *,
+    options,
+    apply_changes=False,
+    refresh_thumbnail_cache=False,
+    no_thumbnail_cache=False,
+):
+    configure_logging(options.do_debug)
+    return load_runtime_context(
+        config_loader=toml.load,
+        config_file=options.config_file,
+        transport_override=options.transport_override,
+        apply_changes=apply_changes,
+        refresh_thumbnail_cache=refresh_thumbnail_cache,
+        no_thumbnail_cache=no_thumbnail_cache,
+    )
 
-    validation_playlists = filter_playlists(playlists, system_name=system_name)
 
-    try:
-        run_cfg = build_run_config(
-            do_sync_playlists=do_sync_playlists,
-            do_sync_bios=do_sync_bios,
-            do_sync_favorites=do_sync_favorites,
-            do_sync_thumbnails=do_sync_thumbails,
-            do_sync_roms=do_sync_roms,
-            do_sync_shaders=do_sync_shaders,
-            do_update_playlists=do_update_playlists,
-            do_update_thumbnails=do_update_thumbnails,
-            dry_run=dry_run,
-            do_debug=do_debug,
-        )
-        validate_run_request(
-            default,
-            validation_playlists,
-            run_cfg,
-            apply_changes=apply_changes,
-        )
-    except ValueError as exc:
-        print(str(exc))
-        sys.exit(-1)
+def resolve_system_name(playlists, *, system_name, yes):
+    if not system_name:
+        return None
+    matches = rank_system_matches(system_name, playlists)
+    if not matches:
+        raise ValueError(f"No playlist match found for '{system_name}'.")
+    if yes:
+        return matches[0]
+    print(f"Select a playlist match for '{system_name}':")
+    for idx, match in enumerate(matches, start=1):
+        print(f"{idx}. {match}")
+    print("0. Cancel")
+    selected = click.prompt(
+        "Enter selection number",
+        type=click.IntRange(0, len(matches)),
+    )
+    if selected == 0:
+        raise ValueError("Operation cancelled.")
+    return matches[selected - 1]
 
-    if do_playlist_list:
+
+def execute_run(
+    *,
+    actions,
+    options,
+    system_name=None,
+    dry_run=False,
+    apply_changes=False,
+    refresh_thumbnail_cache=False,
+    no_thumbnail_cache=False,
+):
+    if not actions:
+        raise ValueError("At least one action is required.")
+    if apply_changes and ACTION_UPDATE_THUMBNAILS not in actions:
+        raise ValueError("--apply requires a command that includes thumbnail updates.")
+    if (refresh_thumbnail_cache or no_thumbnail_cache) and ACTION_UPDATE_THUMBNAILS not in actions:
+        raise ValueError("Thumbnail cache flags require a command that includes thumbnail updates.")
+
+    context = load_cli_runtime(
+        options=options,
+        apply_changes=apply_changes,
+        refresh_thumbnail_cache=refresh_thumbnail_cache,
+        no_thumbnail_cache=no_thumbnail_cache,
+    )
+    default = context.default
+    playlists = context.playlists
+    selected_system = resolve_system_name(playlists, system_name=system_name, yes=options.yes)
+    validation_playlists = filter_playlists(playlists, system_name=selected_system)
+    run_cfg = build_run_config(actions=actions, dry_run=dry_run, do_debug=options.do_debug)
+    validate_run_request(
+        default,
+        validation_playlists,
+        run_cfg,
+        apply_changes=apply_changes,
+    )
+    runner = build_runner(
+        default=default,
+        playlists=playlists,
+        dry_run=dry_run,
+        force_transport=transport_impl_to_force_transport(options.transport_impl),
+        reporter=CliRichReporter(),
+        job_registry=JobRegistry(
+            bios_sync=BiosSync,
+            favorites_sync=FavoritesSync,
+            shader_sync=ShaderSync,
+            thumbnails_sync=ThumbnailsSync,
+            playlist_sync_job=PlaylistSyncJob,
+            playlist_update_job=PlaylistUpdateJob,
+            thumbnails_update_job=ThumbnailsUpdateJob,
+            rom_sync_job=RomSyncJob,
+        ),
+        transport_factory=TransportFactory,
+        runner_factory=SyncRunner,
+    )
+    runner.run(run_cfg, system_name=selected_system)
+
+
+def execute_list(*, options):
+    context = load_cli_runtime(options=options)
+    list_playlists(context.default, context.playlists)
+
+
+def handle_cli_errors(command):
+    @wraps(command)
+    def wrapper(*args, **kwargs):
         try:
-            list_playlists(default, playlists)
+            return command(*args, **kwargs)
         except ValueError as exc:
             print(str(exc))
             sys.exit(-1)
-        sys.exit(0)
+        except (SyncAbortError, TransportError) as exc:
+            print(str(exc))
+            sys.exit(-1)
 
-    try:
-        runner = build_runner(
-            default=default,
-            playlists=playlists,
-            dry_run=dry_run,
-            force_transport=force_transport,
-            reporter=CliRichReporter(),
-            job_registry=JobRegistry(
-                bios_sync=BiosSync,
-                favorites_sync=FavoritesSync,
-                shader_sync=ShaderSync,
-                thumbnails_sync=ThumbnailsSync,
-                playlist_sync_job=PlaylistSyncJob,
-                playlist_update_job=PlaylistUpdateJob,
-                thumbnails_update_job=ThumbnailsUpdateJob,
-                rom_sync_job=RomSyncJob,
-            ),
-            transport_factory=TransportFactory,
-            runner_factory=SyncRunner,
+    return wrapper
+
+
+SYNC_TARGETS = {
+    "playlists": {ACTION_SYNC_PLAYLISTS},
+    "bios": {ACTION_SYNC_BIOS},
+    "favorites": {ACTION_SYNC_FAVORITES},
+    "thumbnails": {ACTION_SYNC_THUMBNAILS},
+    "roms": {ACTION_SYNC_ROMS},
+    "shaders": {ACTION_SYNC_SHADERS},
+    "all": set(SYNC_ACTIONS),
+}
+UPDATE_TARGETS = {
+    "playlists": {ACTION_UPDATE_PLAYLISTS},
+    "thumbnails": {ACTION_UPDATE_THUMBNAILS},
+    "all": set(UPDATE_ACTIONS),
+}
+RUN_PRESETS = {
+    "sync": set(SYNC_ACTIONS),
+    "update": set(UPDATE_ACTIONS),
+    "full": set(ALL_ACTIONS),
+}
+
+
+@click.group(name="retrosync.py", invoke_without_command=True)
+@click.pass_context
+def main(ctx):
+    """Sync RetroArch content across devices."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@main.command("gui")
+def gui():
+    """Launch the GUI."""
+    launch_gui()
+
+
+@main.group("list")
+def list_group():
+    """Inspect configured content."""
+
+
+@list_group.command("playlists")
+@common_runtime_options
+@handle_cli_errors
+def list_playlists_command(config_file, transport_override, transport_impl, yes, do_debug):
+    """List configured playlists with source ROM counts."""
+    _ = transport_impl, yes
+    execute_list(
+        options=CliRuntimeOptions(
+            config_file=config_file,
+            transport_override=transport_override,
+            transport_impl="auto",
+            yes=True,
+            do_debug=do_debug,
         )
-        runner.run(run_cfg, system_name=system_name)
-    except (SyncAbortError, TransportError) as exc:
-        print(str(exc))
-        sys.exit(-1)
+    )
+
+
+@list_group.command("systems")
+@common_runtime_options
+@handle_cli_errors
+def list_systems_command(config_file, transport_override, transport_impl, yes, do_debug):
+    """Alias for list playlists."""
+    _ = transport_impl, yes
+    execute_list(
+        options=CliRuntimeOptions(
+            config_file=config_file,
+            transport_override=transport_override,
+            transport_impl="auto",
+            yes=True,
+            do_debug=do_debug,
+        )
+    )
+
+
+@main.command("sync")
+@click.argument(
+    "target",
+    type=click.Choice(sorted(SYNC_TARGETS.keys()), case_sensitive=False),
+)
+@selection_options
+@common_runtime_options
+@handle_cli_errors
+def sync_command(
+    target,
+    system_name,
+    dry_run,
+    config_file,
+    transport_override,
+    transport_impl,
+    yes,
+    do_debug,
+):
+    """Run copy-oriented sync actions."""
+    execute_run(
+        actions=SYNC_TARGETS[target.lower()],
+        options=CliRuntimeOptions(
+            config_file=config_file,
+            transport_override=transport_override,
+            transport_impl=transport_impl,
+            yes=yes,
+            do_debug=do_debug,
+        ),
+        system_name=system_name,
+        dry_run=dry_run,
+    )
+
+
+@main.command("update")
+@click.argument(
+    "target",
+    type=click.Choice(sorted(UPDATE_TARGETS.keys()), case_sensitive=False),
+)
+@thumbnail_update_options
+@selection_options
+@common_runtime_options
+@handle_cli_errors
+def update_command(
+    target,
+    apply_changes,
+    refresh_thumbnail_cache,
+    no_thumbnail_cache,
+    system_name,
+    dry_run,
+    config_file,
+    transport_override,
+    transport_impl,
+    yes,
+    do_debug,
+):
+    """Run local metadata and asset update actions."""
+    execute_run(
+        actions=UPDATE_TARGETS[target.lower()],
+        options=CliRuntimeOptions(
+            config_file=config_file,
+            transport_override=transport_override,
+            transport_impl=transport_impl,
+            yes=yes,
+            do_debug=do_debug,
+        ),
+        system_name=system_name,
+        dry_run=dry_run,
+        apply_changes=apply_changes,
+        refresh_thumbnail_cache=refresh_thumbnail_cache,
+        no_thumbnail_cache=no_thumbnail_cache,
+    )
+
+
+@main.command("run")
+@click.argument(
+    "preset",
+    type=click.Choice(sorted(RUN_PRESETS.keys()), case_sensitive=False),
+)
+@thumbnail_update_options
+@selection_options
+@common_runtime_options
+@handle_cli_errors
+def run_command(
+    preset,
+    apply_changes,
+    refresh_thumbnail_cache,
+    no_thumbnail_cache,
+    system_name,
+    dry_run,
+    config_file,
+    transport_override,
+    transport_impl,
+    yes,
+    do_debug,
+):
+    """Run predefined multi-action workflows."""
+    execute_run(
+        actions=RUN_PRESETS[preset.lower()],
+        options=CliRuntimeOptions(
+            config_file=config_file,
+            transport_override=transport_override,
+            transport_impl=transport_impl,
+            yes=yes,
+            do_debug=do_debug,
+        ),
+        system_name=system_name,
+        dry_run=dry_run,
+        apply_changes=apply_changes,
+        refresh_thumbnail_cache=refresh_thumbnail_cache,
+        no_thumbnail_cache=no_thumbnail_cache,
+    )
 
 
 if __name__ == "__main__":

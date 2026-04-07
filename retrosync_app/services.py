@@ -91,18 +91,20 @@ def load_runtime_context(
 
 def build_run_config(
     *,
-    do_sync_playlists,
-    do_sync_bios,
-    do_sync_favorites,
-    do_sync_thumbnails,
-    do_sync_roms,
-    do_sync_shaders,
-    do_update_playlists,
-    do_update_thumbnails,
-    dry_run,
-    do_debug,
+    actions=None,
+    do_sync_playlists=False,
+    do_sync_bios=False,
+    do_sync_favorites=False,
+    do_sync_thumbnails=False,
+    do_sync_roms=False,
+    do_sync_shaders=False,
+    do_update_playlists=False,
+    do_update_thumbnails=False,
+    dry_run=False,
+    do_debug=False,
 ):
     return SyncRunConfig(
+        actions=actions,
         do_sync_playlists=do_sync_playlists,
         do_sync_bios=do_sync_bios,
         do_sync_favorites=do_sync_favorites,
@@ -127,14 +129,7 @@ def validate_run_request(default, playlists, run_cfg, *, apply_changes=False):
         default,
         playlists,
         default.get("_shaders", []),
-        do_sync_playlists=run_cfg.do_sync_playlists,
-        do_sync_bios=run_cfg.do_sync_bios,
-        do_sync_favorites=run_cfg.do_sync_favorites,
-        do_sync_thumbnails=run_cfg.do_sync_thumbnails,
-        do_sync_roms=run_cfg.do_sync_roms,
-        do_sync_shaders=run_cfg.do_sync_shaders,
-        do_update_playlists=run_cfg.do_update_playlists,
-        do_update_thumbnails=run_cfg.do_update_thumbnails,
+        actions=run_cfg.actions,
     )
     if apply_changes and run_cfg.do_update_thumbnails and not default.get("src_thumbnails"):
         raise ValueError("[default] 'src_thumbnails' is required for --update-thumbnails --apply")

@@ -1,76 +1,50 @@
-import io
 from unittest.mock import Mock, patch
+
 from click.testing import CliRunner
-from retrosync import main
+
+from retrosync import (
+    ACTION_SYNC_PLAYLISTS,
+    ACTION_SYNC_ROMS,
+    ACTION_SYNC_SHADERS,
+    ACTION_UPDATE_PLAYLISTS,
+    ACTION_UPDATE_THUMBNAILS,
+    main,
+)
 
 
-def run_cli_tool(args):
-    with patch("sys.argv", args), patch("sys.stdout", new=io.StringIO()) as mock_stdout:
-        try:
-            main()
-        except SystemExit:
-            pass
-        return mock_stdout.getvalue().strip()
+def invoke_cli(args, *, input_text=None):
+    return CliRunner().invoke(main, args, input=input_text)
 
 
 def test_help():
-    output = run_cli_tool(["retrosync.py", "--help"])
-    assert "Usage: retrosync.py" in output
+    result = invoke_cli(["--help"])
+    assert result.exit_code == 0, result.output
+    assert "Usage: retrosync.py" in result.output
+    assert "sync" in result.output
+    assert "update" in result.output
+    assert "list" in result.output
 
 
 def test_no_args_prints_help():
-    output = run_cli_tool(["retrosync.py"])
-    assert "Usage: retrosync.py" in output
+    result = invoke_cli([])
+    assert result.exit_code == 0, result.output
+    assert "Usage: retrosync.py" in result.output
 
 
-def test_gui_flag_launches_gui():
+def test_gui_subcommand_launches_gui():
     with patch("retrosync.launch_gui") as launch_gui:
-        result = CliRunner().invoke(main, ["--gui"])
+        result = invoke_cli(["gui"])
 
     assert result.exit_code == 0, result.output
     launch_gui.assert_called_once_with()
-    assert "Usage: " not in result.output
 
 
-def test_prompt():
-    try:
-        run_cli_tool(
-            [
-                "retrosync.py",
-                "--dry-run",
-                "--update-playlists",
-                "--name=psx",
-                "--config-file=test.conf",
-            ]
-        )
-        raise AssertionError()
-    except OSError:
-        assert True
-
-
-def test_prompt_yes():
-    try:
-        run_cli_tool(
-            [
-                "retrosync.py",
-                "--dry-run",
-                "--update-playlists",
-                "--name=psx",
-                "--yes",
-                "--config-file=test.conf",
-            ]
-        )
-        assert True
-    except OSError:
-        raise AssertionError()
-
-
-def test_prompt_shows_multiple_matches():
+def test_prompt_shows_multiple_matches_and_selection_runs_command():
     fake_config = {
         "default": {
             "transport": "filesystem",
-            "src_roms": ["tests/assets/roms"],
             "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
             "src_cores": "tests/assets/cores",
             "src_cores_suffix": ".dylib",
         },
@@ -89,32 +63,80 @@ def test_prompt_shows_multiple_matches():
                 "src_core_path": "core2",
                 "src_core_name": "Core 2",
             },
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = invoke_cli(
+            [
+                "update",
+                "playlists",
+                "--dry-run",
+                "--system",
+                "Nintendo",
+                "--config-file=ignored.conf",
+            ],
+            input_text="2\n",
+        )
+
+    assert result.exit_code == 0, result.output
+    assert "Select a playlist match for 'Nintendo':" in result.output
+    assert "1. Nintendo - NES.lpl" in result.output
+    assert "2. Nintendo - SNES.lpl" in result.output
+    assert fake_runner.run.call_args.kwargs["system_name"] == "Nintendo - SNES.lpl"
+
+
+def test_yes_skips_prompt_and_uses_first_match():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
+        },
+        "playlists": [
             {
-                "name": "FBNeo - Arcade Games.lpl",
-                "src_folder": "fbneo",
-                "dest_folder": "fbneo",
-                "src_core_path": "core3",
-                "src_core_name": "Core 3",
+                "name": "Sony - PlayStation.lpl",
+                "src_folder": "psx",
+                "dest_folder": "psx",
+                "src_core_path": "core1",
+                "src_core_name": "Core 1",
             },
         ],
     }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
     with (
         patch("retrosync.toml.load", return_value=fake_config),
-        patch("retrosync.click.prompt", return_value=0),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+        patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
+        patch("retrosync.click.prompt") as prompt_mock,
     ):
-        output = run_cli_tool(
+        result = invoke_cli(
             [
-                "retrosync.py",
+                "update",
+                "playlists",
                 "--dry-run",
-                "--update-playlists",
-                "--name=Nintendo",
+                "--system=psx",
+                "--yes",
                 "--config-file=ignored.conf",
             ]
         )
-    assert "Select a playlist match for 'Nintendo':" in output
-    assert "1. Nintendo - NES.lpl" in output
-    assert "2. Nintendo - SNES.lpl" in output
-    assert "0. Cancel" in output
+
+    assert result.exit_code == 0, result.output
+    prompt_mock.assert_not_called()
+    assert fake_runner.run.call_args.kwargs["system_name"] == "Sony - PlayStation.lpl"
 
 
 def _minimal_transport_config(default_transport):
@@ -122,6 +144,13 @@ def _minimal_transport_config(default_transport):
         "default": {
             "transport": default_transport,
             "src_roms": ["tests/assets/roms"],
+            "src_playlists": "tests/assets/playlists",
+            "dest_playlists": "tests/assets/playlists",
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
+            "target_roms": "/retroarch/roms",
+            "target_cores": "/retroarch/cores",
+            "target_cores_suffix": "_libretro.so",
         },
         "ssh": {
             "hostname": "example-host",
@@ -133,28 +162,40 @@ def _minimal_transport_config(default_transport):
             "username": "dav-user",
             "password": "dav-pass",
         },
-        "playlists": [],
+        "playlists": [
+            {
+                "name": "Sony - PlayStation.lpl",
+                "src_folder": "psx",
+                "dest_folder": "psx",
+                "src_core_path": "core1",
+                "src_core_name": "Core 1",
+            }
+        ],
     }
 
 
 def test_transport_override_cli_sets_webdav_mode_for_factory():
     fake_config = _minimal_transport_config("filesystem")
     fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
     with (
         patch("retrosync.toml.load", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport) as factory_mock,
+        patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
-        run_cli_tool(
+        result = invoke_cli(
             [
-                "retrosync.py",
+                "sync",
+                "playlists",
                 "--dry-run",
-                "--sync-playlists",
                 "--yes",
                 "--config-file=ignored.conf",
                 "--transport=webdav",
             ]
         )
 
+    assert result.exit_code == 0, result.output
     called_default, called_dry_run, called_force_transport = factory_mock.call_args[0]
     assert called_default["transport"] == "webdav"
     assert called_default["url"] == "http://dav.local"
@@ -162,32 +203,36 @@ def test_transport_override_cli_sets_webdav_mode_for_factory():
     assert str(called_force_transport).lower() == "false"
 
 
-def test_transport_override_with_transport_unix_keeps_force_flag():
+def test_transport_impl_unix_keeps_force_flag():
     fake_config = _minimal_transport_config("filesystem")
     fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
     with (
         patch("retrosync.toml.load", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport) as factory_mock,
+        patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
-        run_cli_tool(
+        result = invoke_cli(
             [
-                "retrosync.py",
+                "sync",
+                "playlists",
                 "--dry-run",
-                "--sync-playlists",
                 "--yes",
                 "--config-file=ignored.conf",
                 "--transport=ssh",
-                "--transport-unix",
+                "--transport-impl=unix",
             ]
         )
 
+    assert result.exit_code == 0, result.output
     called_default, _, called_force_transport = factory_mock.call_args[0]
     assert called_default["transport"] == "ssh"
     assert called_default["hostname"] == "example-host"
     assert called_force_transport == "unix"
 
 
-def test_update_thumbnails_cli_sets_run_config_and_forwards_name_filter():
+def test_update_thumbnails_sets_action_and_forwards_system_filter():
     fake_config = {
         "default": {
             "transport": "filesystem",
@@ -208,25 +253,25 @@ def test_update_thumbnails_cli_sets_run_config_and_forwards_name_filter():
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
     ):
-        result = CliRunner().invoke(
-            main,
+        result = invoke_cli(
             [
+                "update",
+                "thumbnails",
                 "--dry-run",
-                "--update-thumbnails",
-                "--name=psx",
+                "--system=psx",
                 "--yes",
                 "--config-file=ignored.conf",
-            ],
+            ]
         )
 
     assert result.exit_code == 0, result.output
     run_cfg = fake_runner.run.call_args.args[0]
-    assert run_cfg.do_update_thumbnails is True
+    assert ACTION_UPDATE_THUMBNAILS in run_cfg.actions
     assert run_cfg.dry_run is True
     assert fake_runner.run.call_args.kwargs["system_name"] == "Sony - PlayStation.lpl"
 
 
-def test_sync_shaders_cli_sets_run_config():
+def test_sync_shaders_sets_action():
     fake_config = {
         "default": {
             "transport": "filesystem",
@@ -247,56 +292,20 @@ def test_sync_shaders_cli_sets_run_config():
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
-        result = CliRunner().invoke(
-            main,
+        result = invoke_cli(
             [
+                "sync",
+                "shaders",
                 "--dry-run",
-                "--sync-shaders",
                 "--yes",
                 "--config-file=ignored.conf",
-            ],
+            ]
         )
 
     assert result.exit_code == 0, result.output
     run_cfg = fake_runner.run.call_args.args[0]
-    assert run_cfg.do_sync_shaders is True
+    assert ACTION_SYNC_SHADERS in run_cfg.actions
     assert run_cfg.dry_run is True
-
-
-def test_sync_shaders_short_flag_sets_run_config():
-    fake_config = {
-        "default": {
-            "transport": "filesystem",
-            "src_roms": [],
-            "dest_retroarch_base": "/retroarch/config",
-        },
-        "shaders": [
-            {"name": "Snes9x", "shader": "crt/crt-guest-advanced.slangp"},
-        ],
-        "playlists": [],
-    }
-    fake_transport = Mock()
-    fake_runner = Mock()
-    fake_runner_ctor = Mock(return_value=fake_runner)
-
-    with (
-        patch("retrosync.toml.load", return_value=fake_config),
-        patch("retrosync.TransportFactory", return_value=fake_transport),
-        patch("retrosync.SyncRunner", fake_runner_ctor),
-    ):
-        result = CliRunner().invoke(
-            main,
-            [
-                "--dry-run",
-                "-s",
-                "--yes",
-                "--config-file=ignored.conf",
-            ],
-        )
-
-    assert result.exit_code == 0, result.output
-    run_cfg = fake_runner.run.call_args.args[0]
-    assert run_cfg.do_sync_shaders is True
 
 
 def test_update_thumbnails_apply_requires_src_thumbnails():
@@ -312,15 +321,15 @@ def test_update_thumbnails_apply_requires_src_thumbnails():
     }
 
     with patch("retrosync.toml.load", return_value=fake_config):
-        result = CliRunner().invoke(
-            main,
+        result = invoke_cli(
             [
-                "--update-thumbnails",
+                "update",
+                "thumbnails",
                 "--apply",
-                "--name=psx",
+                "--system=psx",
                 "--yes",
                 "--config-file=ignored.conf",
-            ],
+            ]
         )
 
     assert result.exit_code == -1
@@ -348,17 +357,17 @@ def test_update_thumbnails_cache_flags_are_forwarded_to_default_config():
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
     ):
-        result = CliRunner().invoke(
-            main,
+        result = invoke_cli(
             [
+                "update",
+                "thumbnails",
                 "--dry-run",
-                "--update-thumbnails",
                 "--refresh-thumbnail-cache",
                 "--no-thumbnail-cache",
-                "--name=psx",
+                "--system=psx",
                 "--yes",
                 "--config-file=ignored.conf",
-            ],
+            ]
         )
 
     assert result.exit_code == 0, result.output
@@ -403,23 +412,22 @@ def test_targeted_update_playlists_ignores_unrelated_invalid_playlist_config():
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Quake II.lpl", "Quake III.lpl"]),
     ):
-        result = CliRunner().invoke(
-            main,
+        result = invoke_cli(
             [
+                "update",
+                "playlists",
                 "--dry-run",
-                "--update-playlists",
-                "--update-thumbnails",
-                "--name=quake",
+                "--system=quake",
                 "--yes",
                 "--config-file=ignored.conf",
-            ],
+            ]
         )
 
     assert result.exit_code == 0, result.output
     assert fake_runner.run.call_args.kwargs["system_name"] == "Quake II.lpl"
 
 
-def test_rom_sync_advances_transport_file_progress_hooks():
+def test_sync_roms_advances_transport_file_progress_hooks():
     fake_config = {
         "default": {
             "transport": "filesystem",
@@ -457,22 +465,23 @@ def test_rom_sync_advances_transport_file_progress_hooks():
         patch("retrosync.advance_transport_file_progress") as advance_mock,
         patch("retrosync.complete_transport_file_progress") as complete_mock,
     ):
-        run_cli_tool(
+        result = invoke_cli(
             [
-                "retrosync.py",
+                "sync",
+                "roms",
                 "--dry-run",
-                "--sync-roms",
                 "--yes",
                 "--config-file=ignored.conf",
             ]
         )
 
+    assert result.exit_code == 0, result.output
     begin_mock.assert_called_once_with(2)
     assert advance_mock.call_count == 2
     complete_mock.assert_called_once()
 
 
-def test_rom_sync_falls_back_to_per_job_progress_when_no_per_file_callbacks():
+def test_sync_roms_falls_back_to_per_job_progress_when_no_per_file_callbacks():
     fake_config = {
         "default": {
             "transport": "filesystem",
@@ -512,22 +521,125 @@ def test_rom_sync_falls_back_to_per_job_progress_when_no_per_file_callbacks():
         patch("retrosync.advance_transport_file_progress") as advance_mock,
         patch("retrosync.complete_transport_file_progress") as complete_mock,
     ):
-        run_cli_tool(
+        result = invoke_cli(
             [
-                "retrosync.py",
+                "sync",
+                "roms",
                 "--dry-run",
-                "--sync-roms",
                 "--yes",
                 "--config-file=ignored.conf",
             ]
         )
 
+    assert result.exit_code == 0, result.output
     begin_mock.assert_called_once_with(1)
     assert advance_mock.call_count == 1
     complete_mock.assert_called_once()
 
 
-def test_playlist_list_outputs_system_status_counts_and_paths(tmp_path):
+def test_sync_all_is_copy_only():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "dest_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+            "dest_roms": "tests/assets/roms",
+            "src_bios": "tests/assets",
+            "dest_bios": "tests/assets",
+            "src_config": "tests/assets/config",
+            "dest_config": "tests/assets/config",
+            "target_roms": "/retroarch/roms",
+            "target_cores": "/retroarch/cores",
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
+            "target_cores_suffix": "_libretro.so",
+            "src_thumbnails": "tests/assets",
+            "dest_thumbnails": "tests/assets",
+            "dest_retroarch_base": "/retroarch/config",
+        },
+        "shaders": [{"name": "Snes9x", "shader": "crt/test.slangp"}],
+        "playlists": [
+            {
+                "name": "Sony - PlayStation.lpl",
+                "src_folder": "psx",
+                "dest_folder": "psx",
+                "src_core_path": "core1",
+                "src_core_name": "Core 1",
+            }
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = invoke_cli(["sync", "all", "--dry-run", "--yes", "--config-file=ignored.conf"])
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert ACTION_SYNC_PLAYLISTS in run_cfg.actions
+    assert ACTION_SYNC_ROMS in run_cfg.actions
+    assert ACTION_SYNC_SHADERS in run_cfg.actions
+    assert ACTION_UPDATE_PLAYLISTS not in run_cfg.actions
+    assert ACTION_UPDATE_THUMBNAILS not in run_cfg.actions
+
+
+def test_run_full_includes_sync_and_update_actions():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "dest_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+            "dest_roms": "tests/assets/roms",
+            "src_bios": "tests/assets",
+            "dest_bios": "tests/assets",
+            "src_config": "tests/assets/config",
+            "dest_config": "tests/assets/config",
+            "target_roms": "/retroarch/roms",
+            "target_cores": "/retroarch/cores",
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
+            "target_cores_suffix": "_libretro.so",
+            "src_thumbnails": "tests/assets",
+            "dest_thumbnails": "tests/assets",
+            "dest_retroarch_base": "/retroarch/config",
+        },
+        "shaders": [{"name": "Snes9x", "shader": "crt/test.slangp"}],
+        "playlists": [
+            {
+                "name": "Sony - PlayStation.lpl",
+                "src_folder": "psx",
+                "dest_folder": "psx",
+                "src_core_path": "core1",
+                "src_core_name": "Core 1",
+            }
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = invoke_cli(["run", "full", "--dry-run", "--yes", "--config-file=ignored.conf"])
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert ACTION_SYNC_PLAYLISTS in run_cfg.actions
+    assert ACTION_UPDATE_PLAYLISTS in run_cfg.actions
+    assert ACTION_UPDATE_THUMBNAILS in run_cfg.actions
+
+
+def test_list_playlists_outputs_system_status_counts_and_paths(tmp_path):
     roms_a = tmp_path / "roms-a"
     roms_b = tmp_path / "roms-b"
     (roms_a / "NES").mkdir(parents=True)
@@ -557,24 +669,16 @@ def test_playlist_list_outputs_system_status_counts_and_paths(tmp_path):
     }
 
     with patch("retrosync.toml.load", return_value=fake_config):
-        output = run_cli_tool(
-            [
-                "retrosync.py",
-                "--playlist-list",
-                "--config-file=ignored.conf",
-            ]
-        )
+        result = invoke_cli(["list", "playlists", "--config-file=ignored.conf"])
 
-    assert "Configured Playlists" in output
-    assert "Nintendo - NES" in output
-    assert "1" in output
-    assert "0.00 GB" in output
-    assert "Sony - PlayStation" in output
-    assert "🛑" in output
-    assert "0.00 GB" in output
+    assert result.exit_code == 0, result.output
+    assert "Configured Playlists" in result.output
+    assert "Nintendo - NES" in result.output
+    assert "Sony - PlayStation" in result.output
+    assert "🛑" in result.output
 
 
-def test_playlist_list_does_not_create_transport():
+def test_list_playlists_does_not_create_transport():
     fake_config = {
         "default": {
             "transport": "filesystem",
@@ -589,13 +693,8 @@ def test_playlist_list_does_not_create_transport():
         patch("retrosync.toml.load", return_value=fake_config),
         patch("retrosync.TransportFactory") as factory_mock,
     ):
-        output = run_cli_tool(
-            [
-                "retrosync.py",
-                "--playlist-list",
-                "--config-file=ignored.conf",
-            ]
-        )
+        result = invoke_cli(["list", "systems", "--config-file=ignored.conf"])
 
+    assert result.exit_code == 0, result.output
     factory_mock.assert_not_called()
-    assert "Nintendo - NES" in output
+    assert "Nintendo - NES" in result.output

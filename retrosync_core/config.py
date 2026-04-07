@@ -4,6 +4,16 @@ import Levenshtein
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .paths import expand_user_path, expand_user_path_list, retroarch_derived_paths
+from .runner import (
+    ACTION_SYNC_BIOS,
+    ACTION_SYNC_FAVORITES,
+    ACTION_SYNC_PLAYLISTS,
+    ACTION_SYNC_ROMS,
+    ACTION_SYNC_SHADERS,
+    ACTION_SYNC_THUMBNAILS,
+    ACTION_UPDATE_PLAYLISTS,
+    ACTION_UPDATE_THUMBNAILS,
+)
 
 
 class RuntimeConfigModel(BaseModel):
@@ -230,15 +240,26 @@ def validate_runtime_config(
     playlists,
     cores=None,
     *,
-    do_sync_playlists: bool,
-    do_sync_bios: bool,
-    do_sync_favorites: bool,
-    do_sync_thumbnails: bool,
-    do_sync_roms: bool,
-    do_sync_shaders: bool,
-    do_update_playlists: bool,
-    do_update_thumbnails: bool,
+    actions=None,
+    do_sync_playlists: bool = False,
+    do_sync_bios: bool = False,
+    do_sync_favorites: bool = False,
+    do_sync_thumbnails: bool = False,
+    do_sync_roms: bool = False,
+    do_sync_shaders: bool = False,
+    do_update_playlists: bool = False,
+    do_update_thumbnails: bool = False,
 ):
+    action_set = {str(action) for action in (actions or [])}
+    do_sync_playlists = do_sync_playlists or ACTION_SYNC_PLAYLISTS in action_set
+    do_sync_bios = do_sync_bios or ACTION_SYNC_BIOS in action_set
+    do_sync_favorites = do_sync_favorites or ACTION_SYNC_FAVORITES in action_set
+    do_sync_thumbnails = do_sync_thumbnails or ACTION_SYNC_THUMBNAILS in action_set
+    do_sync_roms = do_sync_roms or ACTION_SYNC_ROMS in action_set
+    do_sync_shaders = do_sync_shaders or ACTION_SYNC_SHADERS in action_set
+    do_update_playlists = do_update_playlists or ACTION_UPDATE_PLAYLISTS in action_set
+    do_update_thumbnails = do_update_thumbnails or ACTION_UPDATE_THUMBNAILS in action_set
+
     errors = []
     try:
         runtime = RuntimeConfigModel.model_validate(default)
