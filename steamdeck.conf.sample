@@ -64,7 +64,7 @@ shader = "crt/crt-guest-advanced.slangp"
 
 [[shaders]]
 name = "PrBoom"
-shader = "interpolation/bilinear.slangp"
+shader = "pixel-art-scaling/sharp-bilinear.slangp"
 
 [[shaders]]
 name = "FinalBurn Neo"
@@ -84,7 +84,7 @@ shader = "handheld/lcd-grid.slangp"
 
 [[shaders]]
 name = "Mupen64Plus-Next"
-shader = "interpolation/bilinear.slangp"
+shader = "interpolation/quilez.slangp"
 
 [[shaders]]
 name = "melonDS"
@@ -108,7 +108,7 @@ shader = "crt/crt-guest-advanced.slangp"
 
 [[shaders]]
 name = "vitaQuakeII"
-shader = "interpolation/bilinear.slangp"
+shader = "interpolation/quilez.slangp"
 
 [[shaders]]
 name = "PicoDrive"
@@ -136,7 +136,7 @@ shader = "interpolation/sharp-bilinear-2x-prescale.slangp"
 
 [[shaders]]
 name = "Opera"
-shader = "interpolation/bilinear.slangp"
+shader = "interpolation/quilez.slangp"
 
 
 [[playlists]]

@@ -57,7 +57,7 @@ class ShaderConfigModel(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     name: str
-    shader: str
+    shader: str | list[str]
 
 
 def rank_system_matches(system_name, playlists, limit=8):
@@ -339,8 +339,19 @@ def validate_runtime_config(
             if isinstance(value, str) and value.strip() == "":
                 errors.append(f"[shaders][{idx}] 'name' must not be empty for --sync-shaders")
             value = shader.shader
-            if isinstance(value, str) and value.strip() == "":
-                errors.append(f"[shaders][{idx}] 'shader' must not be empty for --sync-shaders")
+            if isinstance(value, str):
+                if value.strip() == "":
+                    errors.append(f"[shaders][{idx}] 'shader' must not be empty for --sync-shaders")
+            elif isinstance(value, list):
+                if not value:
+                    errors.append(
+                        f"[shaders][{idx}] 'shader' must contain at least one preset for --sync-shaders"
+                    )
+                for preset_idx, preset in enumerate(value, start=1):
+                    if not isinstance(preset, str) or preset.strip() == "":
+                        errors.append(
+                            f"[shaders][{idx}] 'shader[{preset_idx}]' must not be empty for --sync-shaders"
+                        )
 
     if needs_system_jobs and parsed_playlists:
         require_playlist_attr("name", "system jobs")

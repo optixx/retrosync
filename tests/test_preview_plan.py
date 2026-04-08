@@ -323,3 +323,47 @@ def test_build_preview_plan_emits_shader_rows_with_copy_skip_overwrite(tmp_path)
     assert plan.planned_copies == 1
     assert plan.planned_skips == 1
     assert plan.planned_overwrites == 1
+
+
+def test_build_preview_plan_accepts_shader_candidate_lists():
+    default = {
+        "transport": "filesystem",
+        "dest_retroarch_base": "/retroarch",
+        "_shaders": [
+            {
+                "name": "Mupen64Plus-Next",
+                "shader": [
+                    "interpolation/quilez.glslp",
+                    "interpolation/bilinear.glslp",
+                    "interpolation/quilez.slangp",
+                    "interpolation/lanczos2.slangp",
+                ],
+            }
+        ],
+    }
+    run_cfg = build_run_config(
+        do_sync_playlists=False,
+        do_sync_bios=False,
+        do_sync_favorites=False,
+        do_sync_thumbnails=False,
+        do_sync_roms=False,
+        do_sync_shaders=True,
+        do_update_playlists=False,
+        do_update_thumbnails=False,
+        dry_run=True,
+        do_debug=False,
+    )
+
+    plan = build_preview_plan(default=default, playlists=[], run_cfg=run_cfg)
+
+    assert len(plan.rows) == 2
+    sources = {row.source for row in plan.rows}
+    destinations = {row.destination for row in plan.rows}
+    assert sources == {
+        "interpolation/quilez.glslp",
+        "interpolation/quilez.slangp",
+    }
+    assert destinations == {
+        "/retroarch/config/Mupen64Plus-Next/Mupen64Plus-Next.glslp",
+        "/retroarch/config/Mupen64Plus-Next/Mupen64Plus-Next.slangp",
+    }

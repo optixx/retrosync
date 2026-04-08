@@ -107,48 +107,62 @@ class BiosSync(GlobalJob):
 class ShaderSync(GlobalJob):
     name = "Shaders"
 
+    @staticmethod
+    def _shader_candidates(shader_value):
+        if isinstance(shader_value, list):
+            return [str(candidate).strip() for candidate in shader_value if str(candidate).strip()]
+        candidate = str(shader_value).strip()
+        return [candidate] if candidate else []
+
+    @staticmethod
+    def _shader_storage(shader_file):
+        suffix = Path(shader_file).suffix.lower()
+        if suffix == ".glslp":
+            return "shaders_glsl", ".glslp"
+        if suffix == ".cgp":
+            return "shaders_cg", ".cgp"
+        return "shaders_slang", ".slangp"
+
     def setup(self):
         self.dst_base = Path(self.default.get("dest_retroarch_base"))
-        src_retroarch_base = self.default.get("src_retroarch_base")
-        self.src_shader_base = None
-        self.dst_shader_base = self.dst_base / "shaders" / "shaders_slang"
-        if isinstance(src_retroarch_base, str) and src_retroarch_base.strip():
-            self.src_shader_base = (
-                Path(src_retroarch_base).expanduser() / "shaders" / "shaders_slang"
-            )
         self._generated_files = []
         self.transfer_bytes = 0
-        missing_shader_paths = []
         missing_remote_shader_paths = []
 
         for shader in self.default.get("_shaders", []):
             core_name = str(shader.get("name", "")).strip()
-            shader_file = str(shader.get("shader", "")).strip()
+            shader_candidates = self._shader_candidates(shader.get("shader", ""))
             if not core_name:
                 continue
-            if not shader_file:
+            if not shader_candidates:
                 continue
-            if self.src_shader_base is not None:
-                src_shader_path = self.src_shader_base / shader_file
-                if not src_shader_path.is_file():
-                    missing_shader_paths.append(shader_file)
-            remote_shader_exists = self.transport.remote_file_exists(
-                self.dst_shader_base / shader_file
-            )
-            if remote_shader_exists is False:
-                missing_remote_shader_paths.append(shader_file)
-                continue
-            dst = self.dst_base / "config" / core_name / f"{core_name}.slangp"
-            content = f'#reference "../../shaders/shaders_slang/{shader_file}"\n'
-            self._generated_files.append((content, dst))
-            self.transfer_bytes += len(content.encode("utf-8"))
+            missing_candidates = []
+            generated_extensions = set()
+            for shader_file in shader_candidates:
+                shader_dir_name, preset_ext = self._shader_storage(shader_file)
+                if preset_ext in generated_extensions:
+                    continue
+                remote_shader_exists = self.transport.remote_file_exists(
+                    self.dst_base / "shaders" / shader_dir_name / shader_file
+                )
+                if remote_shader_exists is False:
+                    missing_candidates.append(shader_file)
+                    continue
+                dst = self.dst_base / "config" / core_name / f"{core_name}{preset_ext}"
+                content = f'#reference "../../shaders/{shader_dir_name}/{shader_file}"\n'
+                self._generated_files.append((content, dst))
+                self.transfer_bytes += len(content.encode("utf-8"))
+                generated_extensions.add(preset_ext)
+            if not generated_extensions:
+                missing_remote_shader_paths.append((core_name, tuple(missing_candidates)))
 
         self.size = len(self._generated_files)
 
-        for shader_file in sorted(set(missing_shader_paths)):
-            self.add_deferred_message(f"Warning: local shader preset not found: {shader_file}")
-        for shader_file in sorted(set(missing_remote_shader_paths)):
-            self.add_deferred_message(f"Warning: remote shader preset not found: {shader_file}")
+        for core_name, shader_files in sorted(set(missing_remote_shader_paths)):
+            candidates = ", ".join(shader_files)
+            self.add_deferred_message(
+                f"Warning: remote shader preset not found for {core_name}: {candidates}"
+            )
         self.add_deferred_message(f"Shader presets generated: {len(self._generated_files)}")
 
     def do(self, callback=None, cancel_check=None):

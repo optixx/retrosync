@@ -336,33 +336,53 @@ def _plan_recursive_copy(*, action, system, src_root, dest_root, default, capabi
 
 
 def _plan_shader_sync_rows(*, default, capabilities):
+    def shader_candidates(shader_value):
+        if isinstance(shader_value, list):
+            return [str(candidate).strip() for candidate in shader_value if str(candidate).strip()]
+        candidate = str(shader_value).strip()
+        return [candidate] if candidate else []
+
+    def shader_storage(shader_file):
+        suffix = Path(shader_file).suffix.lower()
+        if suffix == ".glslp":
+            return "shaders_glsl", ".glslp"
+        if suffix == ".cgp":
+            return "shaders_cg", ".cgp"
+        return "shaders_slang", ".slangp"
+
     dst_base = default.get("dest_retroarch_base")
     if not dst_base:
         return []
     rows = []
     for shader in default.get("_shaders", []):
         core_name = str(shader.get("name", "")).strip()
-        shader_file = str(shader.get("shader", "")).strip()
-        if not core_name or not shader_file:
+        candidates = shader_candidates(shader.get("shader", ""))
+        if not core_name or not candidates:
             continue
-        content = f'#reference "../../shaders/shaders_slang/{shader_file}"\n'
-        destination = Path(dst_base) / "config" / core_name / f"{core_name}.slangp"
-        rows.append(
-            PreviewPlanRow(
-                action="sync_shaders",
-                operation=_classify_generated_sync_operation(
-                    destination,
-                    content,
-                    default=default,
-                    capabilities=capabilities,
-                ),
-                system="Global",
-                source=shader_file,
-                destination=str(destination),
-                size_bytes=len(content.encode("utf-8")),
-                details=f"Generate shader preset for core '{core_name}'.",
+        planned_extensions = set()
+        for shader_file in candidates:
+            shader_dir_name, preset_ext = shader_storage(shader_file)
+            if preset_ext in planned_extensions:
+                continue
+            content = f'#reference "../../shaders/{shader_dir_name}/{shader_file}"\n'
+            destination = Path(dst_base) / "config" / core_name / f"{core_name}{preset_ext}"
+            rows.append(
+                PreviewPlanRow(
+                    action="sync_shaders",
+                    operation=_classify_generated_sync_operation(
+                        destination,
+                        content,
+                        default=default,
+                        capabilities=capabilities,
+                    ),
+                    system="Global",
+                    source=shader_file,
+                    destination=str(destination),
+                    size_bytes=len(content.encode("utf-8")),
+                    details=f"Generate shader preset for core '{core_name}'.",
+                )
             )
-        )
+            planned_extensions.add(preset_ext)
     return rows
 
 

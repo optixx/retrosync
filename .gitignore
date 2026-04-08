@@ -6,3 +6,4 @@ iphone.conf
 ipad.conf
 *.code-workspace
 .cache/
+shaders*

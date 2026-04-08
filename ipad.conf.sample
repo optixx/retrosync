@@ -24,7 +24,7 @@ password = ""
 
 [[shaders]]
 name = "Atari - 2600 (Stella)"
-shader = "crt/crt-easymode.slangp"
+shader = ["crt/crt-easymode.glslp", "crt/crt-easymode.slangp"]
 
 [[shaders]]
 name = "Arcade (FinalBurn Neo)"
@@ -40,7 +40,7 @@ shader = "crt/crt-guest-advanced.slangp"
 
 [[shaders]]
 name = "Nintendo - Game Boy Advance (mGBA)"
-shader = "handheld/lcd-grid-v2.slangp"
+shader = ["handheld/lcd-grid-v2.glslp", "handheld/lcd-grid-v2.slangp"]
 
 [[shaders]]
 name = "Sony - PlayStation (Beetle PSX)"
