@@ -560,7 +560,7 @@ RUN_PRESETS = {
     help="Use config file",
 )
 @click.pass_context
-def main(ctx, _config_file):
+def main(ctx, config_file):  # noqa: ARG001
     """Sync RetroArch content across devices."""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
