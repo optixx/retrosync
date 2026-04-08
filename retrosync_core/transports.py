@@ -136,6 +136,10 @@ class TransportBase:
 
         return total
 
+    def remote_file_exists(self, path: Path):
+        _ = path
+        return None
+
 
 class TransportUnixBase(TransportBase):
     capabilities = TransportCapabilities(
@@ -450,6 +454,11 @@ class TransportWebDAV(TransportBase):
             if "HTTP 404" in str(exc):
                 return False
             raise
+
+    def remote_file_exists(self, path: Path):
+        if self.dry_run:
+            return None
+        return self._path_exists(self._remote_path(path))
 
     def ensure_dir_exists(self, path_directory: Path):
         if self.dry_run:

@@ -111,6 +111,7 @@ class ShaderSync(GlobalJob):
         self.dst_base = Path(self.default.get("dest_retroarch_base"))
         src_retroarch_base = self.default.get("src_retroarch_base")
         self.src_shader_base = None
+        self.dst_shader_base = self.dst_base / "shaders" / "shaders_slang"
         if isinstance(src_retroarch_base, str) and src_retroarch_base.strip():
             self.src_shader_base = (
                 Path(src_retroarch_base).expanduser() / "shaders" / "shaders_slang"
@@ -118,6 +119,7 @@ class ShaderSync(GlobalJob):
         self._generated_files = []
         self.transfer_bytes = 0
         missing_shader_paths = []
+        missing_remote_shader_paths = []
 
         for shader in self.default.get("_shaders", []):
             core_name = str(shader.get("name", "")).strip()
@@ -130,6 +132,12 @@ class ShaderSync(GlobalJob):
                 src_shader_path = self.src_shader_base / shader_file
                 if not src_shader_path.is_file():
                     missing_shader_paths.append(shader_file)
+            remote_shader_exists = self.transport.remote_file_exists(
+                self.dst_shader_base / shader_file
+            )
+            if remote_shader_exists is False:
+                missing_remote_shader_paths.append(shader_file)
+                continue
             dst = self.dst_base / "config" / core_name / f"{core_name}.slangp"
             content = f'#reference "../../shaders/shaders_slang/{shader_file}"\n'
             self._generated_files.append((content, dst))
@@ -139,6 +147,8 @@ class ShaderSync(GlobalJob):
 
         for shader_file in sorted(set(missing_shader_paths)):
             self.add_deferred_message(f"Warning: local shader preset not found: {shader_file}")
+        for shader_file in sorted(set(missing_remote_shader_paths)):
+            self.add_deferred_message(f"Warning: remote shader preset not found: {shader_file}")
         self.add_deferred_message(f"Shader presets generated: {len(self._generated_files)}")
 
     def do(self, callback=None, cancel_check=None):

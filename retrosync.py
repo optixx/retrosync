@@ -105,6 +105,7 @@ from retrosync_core.ui import (
 )
 
 logger = logging.getLogger()
+DEFAULT_CONFIG_FILE = "steamdeck.conf"
 
 __all__ = [
     "GLOBAL_EXCLUDE_PATTERNS",
@@ -308,8 +309,8 @@ def common_runtime_options(command):
     @click.option(
         "--config-file",
         "-c",
-        default="steamdeck.conf",
-        help="Use config file",
+        default=None,
+        help="Override config file for this command",
     )
     @click.option(
         "--transport",
@@ -401,6 +402,17 @@ def configure_logging(do_debug):
 def transport_impl_to_force_transport(transport_impl):
     normalized = str(transport_impl).strip().lower()
     return False if normalized in ("", "auto", "false") else normalized
+
+
+def resolve_config_file(config_file):
+    if config_file:
+        return config_file
+    ctx = click.get_current_context(silent=True)
+    if ctx is not None:
+        root_config_file = ctx.find_root().params.get("config_file")
+        if root_config_file:
+            return root_config_file
+    return DEFAULT_CONFIG_FILE
 
 
 def load_cli_runtime(
@@ -540,8 +552,15 @@ RUN_PRESETS = {
 
 
 @click.group(name="retrosync.py", invoke_without_command=True)
+@click.option(
+    "--config-file",
+    "-c",
+    default=DEFAULT_CONFIG_FILE,
+    show_default=True,
+    help="Use config file",
+)
 @click.pass_context
-def main(ctx):
+def main(ctx, _config_file):
     """Sync RetroArch content across devices."""
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
@@ -566,7 +585,7 @@ def list_playlists_command(config_file, transport_override, transport_impl, yes,
     _ = transport_impl, yes
     execute_list(
         options=CliRuntimeOptions(
-            config_file=config_file,
+            config_file=resolve_config_file(config_file),
             transport_override=transport_override,
             transport_impl="auto",
             yes=True,
@@ -583,7 +602,7 @@ def list_systems_command(config_file, transport_override, transport_impl, yes, d
     _ = transport_impl, yes
     execute_list(
         options=CliRuntimeOptions(
-            config_file=config_file,
+            config_file=resolve_config_file(config_file),
             transport_override=transport_override,
             transport_impl="auto",
             yes=True,
@@ -614,7 +633,7 @@ def sync_command(
     execute_run(
         actions=SYNC_TARGETS[target.lower()],
         options=CliRuntimeOptions(
-            config_file=config_file,
+            config_file=resolve_config_file(config_file),
             transport_override=transport_override,
             transport_impl=transport_impl,
             yes=yes,
@@ -651,7 +670,7 @@ def update_command(
     execute_run(
         actions=UPDATE_TARGETS[target.lower()],
         options=CliRuntimeOptions(
-            config_file=config_file,
+            config_file=resolve_config_file(config_file),
             transport_override=transport_override,
             transport_impl=transport_impl,
             yes=yes,
@@ -691,7 +710,7 @@ def run_command(
     execute_run(
         actions=RUN_PRESETS[preset.lower()],
         options=CliRuntimeOptions(
-            config_file=config_file,
+            config_file=resolve_config_file(config_file),
             transport_override=transport_override,
             transport_impl=transport_impl,
             yes=yes,

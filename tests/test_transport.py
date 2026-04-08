@@ -592,6 +592,42 @@ def test_transport_webdav_path_exists_reraises_non_404_errors():
             transport._path_exists("/x")
 
 
+def test_transport_webdav_remote_file_exists_uses_normalized_remote_path():
+    default = {
+        "transport": "webdav",
+        "url": "http://dav.local",
+        "username": "user",
+        "password": "pass",
+    }
+    transport = TransportWebDAV(default, dry_run=False)
+
+    with patch.object(transport, "_path_exists", return_value=True) as mock_path_exists:
+        assert (
+            transport.remote_file_exists(Path("/RetroArch/shaders/shaders_slang/test.slangp"))
+            is True
+        )
+
+    mock_path_exists.assert_called_once_with("/RetroArch/shaders/shaders_slang/test.slangp")
+
+
+def test_transport_webdav_remote_file_exists_skips_network_in_dry_run():
+    default = {
+        "transport": "webdav",
+        "url": "http://dav.local",
+        "username": "user",
+        "password": "pass",
+    }
+    transport = TransportWebDAV(default, dry_run=True)
+
+    with patch.object(transport, "_path_exists") as mock_path_exists:
+        assert (
+            transport.remote_file_exists(Path("/RetroArch/shaders/shaders_slang/test.slangp"))
+            is None
+        )
+
+    mock_path_exists.assert_not_called()
+
+
 def test_transport_webdav_parallel_copy_calls_callback_for_each_file(tmp_path):
     src = tmp_path / "src"
     dst = Path("/Sync")
