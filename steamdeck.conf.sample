@@ -84,7 +84,7 @@ shader = "handheld/lcd-grid.slangp"
 
 [[shaders]]
 name = "Mupen64Plus-Next"
-shader = "interpolation/quilez.slangp"
+shader = "crt/crt-guest-advanced.slangp"
 
 [[shaders]]
 name = "melonDS"
