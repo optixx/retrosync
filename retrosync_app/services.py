@@ -94,7 +94,6 @@ def build_run_config(
     actions=None,
     do_sync_playlists=False,
     do_sync_bios=False,
-    do_sync_favorites=False,
     do_sync_thumbnails=False,
     do_sync_roms=False,
     do_sync_shaders=False,
@@ -107,7 +106,6 @@ def build_run_config(
         actions=actions,
         do_sync_playlists=do_sync_playlists,
         do_sync_bios=do_sync_bios,
-        do_sync_favorites=do_sync_favorites,
         do_sync_thumbnails=do_sync_thumbnails,
         do_sync_roms=do_sync_roms,
         do_sync_shaders=do_sync_shaders,
@@ -184,26 +182,6 @@ def build_preview_plan(
                 dest_root=default.get("dest_bios"),
                 default=default,
                 capabilities=capabilities,
-            )
-        )
-
-    if run_cfg.do_sync_favorites:
-        src = Path(default.get("src_config", "")) / "content_favorites.lpl"
-        dst = Path(default.get("dest_config", "")) / "content_favorites.lpl"
-        rows.append(
-            PreviewPlanRow(
-                action="sync_favorites",
-                operation=_classify_sync_operation(
-                    src,
-                    dst,
-                    default=default,
-                    capabilities=capabilities,
-                ),
-                system="Global",
-                source=str(src),
-                destination=str(dst),
-                size_bytes=_safe_size(src),
-                details="Rewrite favorite paths and core references before copy.",
             )
         )
 

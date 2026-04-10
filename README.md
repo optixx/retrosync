@@ -4,13 +4,12 @@
 
 Retrosync syncs [RetroArch](https://retroarch.com/) content from a desktop library to targets like a Steam Deck, iOS device, or local export directory.
 
-It handles playlists, ROMs, BIOS files, favorites, thumbnails, and shader presets. It can also rebuild local playlists and drive a thumbnail matching workflow from your existing library.
+It handles playlists, ROMs, BIOS files, thumbnails, and shader presets. It can also rebuild local playlists and drive a thumbnail matching workflow from your existing library.
 
 ## Features
 
 ### Sync
 - Playlists
-- Favorites
 - ROMs
 - BIOS files
 - Thumbnails
@@ -52,7 +51,7 @@ retrosync.py run full
 
 ### Command groups
 
-- `sync <playlists|bios|favorites|thumbnails|roms|shaders|all>` runs copy-oriented sync tasks.
+- `sync <playlists|bios|thumbnails|roms|shaders|all>` runs copy-oriented sync tasks.
 - `update <playlists|thumbnails|all>` runs local metadata and asset update tasks.
 - `run <sync|update|full>` runs explicit multi-action presets.
 - `list <playlists|systems>` shows configured systems and source ROM counts.

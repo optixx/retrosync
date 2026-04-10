@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 class RunSetupState:
     do_sync_playlists: bool = True
     do_sync_bios: bool = False
-    do_sync_favorites: bool = False
     do_sync_thumbnails: bool = False
     do_sync_roms: bool = False
     do_sync_shaders: bool = False

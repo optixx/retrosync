@@ -9,7 +9,6 @@ from typing import Protocol
 from .events import EventType, NullEventSink, SyncEvent
 from .jobs import (
     BiosSync,
-    FavoritesSync,
     PlaylistSyncJob,
     PlaylistUpdateJob,
     RomSyncJob,
@@ -23,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 ACTION_SYNC_PLAYLISTS = "sync_playlists"
 ACTION_SYNC_BIOS = "sync_bios"
-ACTION_SYNC_FAVORITES = "sync_favorites"
 ACTION_SYNC_THUMBNAILS = "sync_thumbnails"
 ACTION_SYNC_ROMS = "sync_roms"
 ACTION_SYNC_SHADERS = "sync_shaders"
@@ -34,7 +32,6 @@ ALL_ACTIONS = frozenset(
     {
         ACTION_SYNC_PLAYLISTS,
         ACTION_SYNC_BIOS,
-        ACTION_SYNC_FAVORITES,
         ACTION_SYNC_THUMBNAILS,
         ACTION_SYNC_ROMS,
         ACTION_SYNC_SHADERS,
@@ -46,7 +43,6 @@ SYNC_ACTIONS = frozenset(
     {
         ACTION_SYNC_PLAYLISTS,
         ACTION_SYNC_BIOS,
-        ACTION_SYNC_FAVORITES,
         ACTION_SYNC_THUMBNAILS,
         ACTION_SYNC_ROMS,
         ACTION_SYNC_SHADERS,
@@ -84,7 +80,6 @@ class SyncRunConfig:
         actions=None,
         do_sync_playlists=False,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=False,
@@ -98,8 +93,6 @@ class SyncRunConfig:
             normalized_actions.add(ACTION_SYNC_PLAYLISTS)
         if do_sync_bios:
             normalized_actions.add(ACTION_SYNC_BIOS)
-        if do_sync_favorites:
-            normalized_actions.add(ACTION_SYNC_FAVORITES)
         if do_sync_thumbnails:
             normalized_actions.add(ACTION_SYNC_THUMBNAILS)
         if do_sync_roms:
@@ -133,10 +126,6 @@ class SyncRunConfig:
         return self.includes(ACTION_SYNC_BIOS)
 
     @property
-    def do_sync_favorites(self):
-        return self.includes(ACTION_SYNC_FAVORITES)
-
-    @property
     def do_sync_thumbnails(self):
         return self.includes(ACTION_SYNC_THUMBNAILS)
 
@@ -160,7 +149,6 @@ class SyncRunConfig:
 @dataclass(frozen=True)
 class JobRegistry:
     bios_sync: type = BiosSync
-    favorites_sync: type = FavoritesSync
     shader_sync: type = ShaderSync
     thumbnails_sync: type = ThumbnailsSync
     playlist_sync_job: type = PlaylistSyncJob
@@ -289,11 +277,6 @@ class SyncRunner:
         jobs = []
         if cfg.includes(ACTION_SYNC_BIOS):
             jobs.append(self.job_registry.bios_sync(self.default, self.playlists, self.transport))
-
-        if cfg.includes(ACTION_SYNC_FAVORITES):
-            jobs.append(
-                self.job_registry.favorites_sync(self.default, self.playlists, self.transport)
-            )
 
         if cfg.includes(ACTION_SYNC_SHADERS):
             jobs.append(self.job_registry.shader_sync(self.default, self.playlists, self.transport))

@@ -6,7 +6,6 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from .paths import expand_user_path, expand_user_path_list, retroarch_derived_paths
 from .runner import (
     ACTION_SYNC_BIOS,
-    ACTION_SYNC_FAVORITES,
     ACTION_SYNC_PLAYLISTS,
     ACTION_SYNC_ROMS,
     ACTION_SYNC_SHADERS,
@@ -243,7 +242,6 @@ def validate_runtime_config(
     actions=None,
     do_sync_playlists: bool = False,
     do_sync_bios: bool = False,
-    do_sync_favorites: bool = False,
     do_sync_thumbnails: bool = False,
     do_sync_roms: bool = False,
     do_sync_shaders: bool = False,
@@ -253,7 +251,6 @@ def validate_runtime_config(
     action_set = {str(action) for action in (actions or [])}
     do_sync_playlists = do_sync_playlists or ACTION_SYNC_PLAYLISTS in action_set
     do_sync_bios = do_sync_bios or ACTION_SYNC_BIOS in action_set
-    do_sync_favorites = do_sync_favorites or ACTION_SYNC_FAVORITES in action_set
     do_sync_thumbnails = do_sync_thumbnails or ACTION_SYNC_THUMBNAILS in action_set
     do_sync_roms = do_sync_roms or ACTION_SYNC_ROMS in action_set
     do_sync_shaders = do_sync_shaders or ACTION_SYNC_SHADERS in action_set
@@ -310,17 +307,6 @@ def validate_runtime_config(
     if do_sync_bios:
         require_default("src_bios", "--sync-bios")
         require_default("dest_bios", "--sync-bios")
-
-    if do_sync_favorites:
-        require_default("src_config", "--sync-favorites")
-        require_default("dest_config", "--sync-favorites")
-        require_default("target_roms", "--sync-favorites")
-        require_default("target_cores", "--sync-favorites")
-        require_default("src_cores", "--sync-favorites")
-        require_default("src_cores_suffix", "--sync-favorites")
-        require_default("target_cores_suffix", "--sync-favorites")
-        require_playlist_attr("src_core_name", "--sync-favorites")
-        require_playlist_attr("dest_folder", "--sync-favorites", allow_empty=True)
 
     needs_system_jobs = (
         do_sync_playlists or do_sync_roms or do_update_playlists or do_update_thumbnails

@@ -35,7 +35,6 @@ def test_build_preview_plan_emits_copy_rewrite_and_download_rows(tmp_path, monke
     run_cfg = build_run_config(
         do_sync_playlists=True,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=True,
         do_sync_shaders=False,
@@ -155,7 +154,6 @@ def test_build_preview_plan_uses_item_level_rows_for_playlist_and_thumbnail_upda
     run_cfg = build_run_config(
         do_sync_playlists=False,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=False,
@@ -216,7 +214,6 @@ def test_build_preview_plan_classifies_local_sync_rows_as_copy_skip_overwrite(tm
     run_cfg = build_run_config(
         do_sync_playlists=False,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=True,
         do_sync_shaders=False,
@@ -260,7 +257,6 @@ def test_build_preview_plan_uses_local_only_thumbnail_preview_by_default(tmp_pat
     run_cfg = build_run_config(
         do_sync_playlists=False,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=False,
@@ -304,7 +300,6 @@ def test_build_preview_plan_emits_shader_rows_with_copy_skip_overwrite(tmp_path)
     run_cfg = build_run_config(
         do_sync_playlists=False,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=True,
@@ -344,7 +339,6 @@ def test_build_preview_plan_accepts_shader_candidate_lists():
     run_cfg = build_run_config(
         do_sync_playlists=False,
         do_sync_bios=False,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=True,

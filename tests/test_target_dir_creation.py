@@ -2,7 +2,6 @@ import json
 
 from retrosync import (
     BiosSync,
-    FavoritesSync,
     PlaylistSyncJob,
     RomSyncJob,
     TransportFileSystemUnix,
@@ -14,17 +13,14 @@ def test_sync_jobs_create_missing_target_directories(tmp_path, mocker):
     dest_root = tmp_path / "dest"
 
     src_bios = src_root / "system"
-    src_config = src_root / "config"
     src_roms = src_root / "roms"
     src_playlists = src_root / "playlists"
 
     src_bios.mkdir(parents=True)
-    src_config.mkdir(parents=True)
     (src_roms / "NES").mkdir(parents=True)
     src_playlists.mkdir(parents=True)
 
     (src_bios / "bios.bin").write_text("bios", encoding="utf-8")
-    (src_config / "content_favorites.lpl").write_text('{"items": []}', encoding="utf-8")
     (src_roms / "NES" / "Super Mario Bros.zip").write_text("rom", encoding="utf-8")
 
     playlist_name = "Nintendo - NES.lpl"
@@ -59,11 +55,9 @@ def test_sync_jobs_create_missing_target_directories(tmp_path, mocker):
     default_config = {
         "transport": "filesystem",
         "src_bios": str(src_bios),
-        "src_config": str(src_config),
         "src_roms": [str(src_roms)],
         "src_playlists": str(src_playlists),
         "dest_bios": str(dest_root / "system"),
-        "dest_config": str(dest_root / "config"),
         "dest_roms": str(dest_root / "roms"),
         "dest_playlists": str(dest_root / "playlists"),
         "src_cores": "/src/cores",
@@ -82,12 +76,6 @@ def test_sync_jobs_create_missing_target_directories(tmp_path, mocker):
     bios_sync.setup()
     bios_sync.do()
     assert (dest_root / "system").is_dir()
-
-    favorites_sync = FavoritesSync(default_config, [], transport)
-    favorites_sync.setup()
-    favorites_sync.do()
-    assert (dest_root / "config").is_dir()
-    assert (dest_root / "config" / "content_favorites.lpl").exists()
 
     playlist_sync = PlaylistSyncJob(default_config, transport)
     playlist_sync.setup(playlist)

@@ -474,7 +474,6 @@ class RetrosyncAppController:
         return build_run_config(
             do_sync_playlists=run_setup.do_sync_playlists,
             do_sync_bios=run_setup.do_sync_bios,
-            do_sync_favorites=run_setup.do_sync_favorites,
             do_sync_thumbnails=run_setup.do_sync_thumbnails,
             do_sync_roms=run_setup.do_sync_roms,
             do_sync_shaders=run_setup.do_sync_shaders,

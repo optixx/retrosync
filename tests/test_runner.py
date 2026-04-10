@@ -107,7 +107,6 @@ def _cfg():
     return SyncRunConfig(
         do_sync_playlists=False,
         do_sync_bios=True,
-        do_sync_favorites=False,
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=False,
@@ -245,7 +244,6 @@ def test_runner_filters_update_thumbnails_to_selected_system():
         SyncRunConfig(
             do_sync_playlists=False,
             do_sync_bios=False,
-            do_sync_favorites=False,
             do_sync_thumbnails=False,
             do_sync_roms=False,
             do_sync_shaders=False,
@@ -284,7 +282,6 @@ def test_runner_filters_sync_thumbnails_to_selected_system():
         SyncRunConfig(
             do_sync_playlists=False,
             do_sync_bios=False,
-            do_sync_favorites=False,
             do_sync_thumbnails=True,
             do_sync_roms=False,
             do_sync_shaders=False,

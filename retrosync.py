@@ -32,7 +32,6 @@ from retrosync_core.config import (
 )
 from retrosync_core.jobs import (
     BiosSync,
-    FavoritesSync,
     GlobalJob,
     JobBase,
     PlaylistSyncJob,
@@ -52,7 +51,6 @@ from retrosync_core.paths import (
 )
 from retrosync_core.runner import (
     ACTION_SYNC_BIOS,
-    ACTION_SYNC_FAVORITES,
     ACTION_SYNC_PLAYLISTS,
     ACTION_SYNC_ROMS,
     ACTION_SYNC_SHADERS,
@@ -126,7 +124,6 @@ __all__ = [
     "SystemJob",
     "BiosSync",
     "ThumbnailsSync",
-    "FavoritesSync",
     "ShaderSync",
     "RomSyncJob",
     "PlaylistSyncJob",
@@ -496,7 +493,6 @@ def execute_run(
         reporter=CliRichReporter(),
         job_registry=JobRegistry(
             bios_sync=BiosSync,
-            favorites_sync=FavoritesSync,
             shader_sync=ShaderSync,
             thumbnails_sync=ThumbnailsSync,
             playlist_sync_job=PlaylistSyncJob,
@@ -533,7 +529,6 @@ def handle_cli_errors(command):
 SYNC_TARGETS = {
     "playlists": {ACTION_SYNC_PLAYLISTS},
     "bios": {ACTION_SYNC_BIOS},
-    "favorites": {ACTION_SYNC_FAVORITES},
     "thumbnails": {ACTION_SYNC_THUMBNAILS},
     "roms": {ACTION_SYNC_ROMS},
     "shaders": {ACTION_SYNC_SHADERS},

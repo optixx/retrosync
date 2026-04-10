@@ -15,7 +15,6 @@ from .paths import (
 )
 from .jobs import (
     BiosSync,
-    FavoritesSync,
     GlobalJob,
     JobBase,
     PlaylistSyncJob,
@@ -74,7 +73,6 @@ __all__ = [
     "SystemJob",
     "BiosSync",
     "ThumbnailsSync",
-    "FavoritesSync",
     "RomSyncJob",
     "PlaylistSyncJob",
     "PlaylistUpdateJob",

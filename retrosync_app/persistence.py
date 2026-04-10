@@ -7,7 +7,6 @@ DEFAULT_APP_STATE_PATH = Path(".cache") / "retrosync" / "gui-state.json"
 PERSISTED_RUN_SETUP_FIELDS = [
     "do_sync_playlists",
     "do_sync_bios",
-    "do_sync_favorites",
     "do_sync_thumbnails",
     "do_sync_roms",
     "do_sync_shaders",
