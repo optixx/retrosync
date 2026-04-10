@@ -295,6 +295,9 @@ class TransportWindowsBase(TransportBase):
 
 class TransportWebDAV(TransportBase):
     DEFAULT_MAX_WORKERS = 4
+    DEFAULT_TIMEOUT_SECONDS = 30
+    DEFAULT_RETRIES = 1
+    DEFAULT_RETRY_DELAY_SECONDS = 1.0
     capabilities = TransportCapabilities(
         per_file_callback=True,
         preserves_mtime=False,
@@ -321,12 +324,35 @@ class TransportWebDAV(TransportBase):
             )
         except (TypeError, ValueError):
             self.max_workers = self.DEFAULT_MAX_WORKERS
+        try:
+            self.timeout_seconds = max(
+                1.0,
+                float(self.default.get("webdav_timeout_seconds", self.DEFAULT_TIMEOUT_SECONDS)),
+            )
+        except (TypeError, ValueError):
+            self.timeout_seconds = float(self.DEFAULT_TIMEOUT_SECONDS)
+        try:
+            self.retries = max(0, int(self.default.get("webdav_retries", self.DEFAULT_RETRIES)))
+        except (TypeError, ValueError):
+            self.retries = self.DEFAULT_RETRIES
+        try:
+            self.retry_delay_seconds = max(
+                0.0,
+                float(
+                    self.default.get("webdav_retry_delay_seconds", self.DEFAULT_RETRY_DELAY_SECONDS)
+                ),
+            )
+        except (TypeError, ValueError):
+            self.retry_delay_seconds = self.DEFAULT_RETRY_DELAY_SECONDS
         logger.debug(
-            "TransportWebDAV::__ctor__: dry_run=%s url=%s username=%s max_workers=%s",
+            "TransportWebDAV::__ctor__: dry_run=%s url=%s username=%s max_workers=%s timeout=%ss retries=%s retry_delay=%ss",
             self.dry_run,
             self.base_url,
             self.username,
             self.max_workers,
+            self.timeout_seconds,
+            self.retries,
+            self.retry_delay_seconds,
         )
         if not self.base_url:
             raise TransportError("WebDAV transport requires [webdav].url in the config.")
@@ -372,7 +398,7 @@ class TransportWebDAV(TransportBase):
         url = f"{self.base_url}{encoded_path}"
         request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
         logger.debug("TransportWebDAV::_request: method=%s path=%s", method, path)
-        with self._get_thread_opener().open(request, timeout=30) as response:
+        with self._get_thread_opener().open(request, timeout=self.timeout_seconds) as response:
             if response.status not in ok_codes:
                 raise RuntimeError(f"WebDAV {method} {path} failed with HTTP {response.status}")
             logger.debug(
@@ -391,45 +417,59 @@ class TransportWebDAV(TransportBase):
             except (OSError, ValueError):
                 pass
 
-        try:
-            rewind_body()
-            self._request_once(method, path, body=body, headers=headers, ok_codes=ok_codes)
-            return
-        except urllib.error.HTTPError as exc:
-            if exc.code in ok_codes:
+        attempts = self.retries + 1
+        for attempt in range(1, attempts + 1):
+            try:
+                rewind_body()
+                self._request_once(method, path, body=body, headers=headers, ok_codes=ok_codes)
                 return
-            if exc.code == 401 and self._auth_header:
-                retry_headers = dict(headers or {})
-                retry_headers["Authorization"] = self._auth_header
-                logger.debug(
-                    "TransportWebDAV::_request: 401 for %s %s, retrying with preemptive Basic auth",
-                    method,
-                    path,
-                )
-                try:
-                    rewind_body()
-                    self._request_once(
-                        method, path, body=body, headers=retry_headers, ok_codes=ok_codes
-                    )
+            except urllib.error.HTTPError as exc:
+                if exc.code in ok_codes:
                     return
-                except urllib.error.HTTPError as retry_exc:
-                    if retry_exc.code in ok_codes:
+                if exc.code == 401 and self._auth_header:
+                    retry_headers = dict(headers or {})
+                    retry_headers["Authorization"] = self._auth_header
+                    logger.debug(
+                        "TransportWebDAV::_request: 401 for %s %s, retrying with preemptive Basic auth",
+                        method,
+                        path,
+                    )
+                    try:
+                        rewind_body()
+                        self._request_once(
+                            method, path, body=body, headers=retry_headers, ok_codes=ok_codes
+                        )
                         return
+                    except urllib.error.HTTPError as retry_exc:
+                        if retry_exc.code in ok_codes:
+                            return
+                        raise RuntimeError(
+                            f"WebDAV {method} {path} failed with HTTP 401 (Unauthorized). "
+                            "Check [webdav] username/password and target path permissions."
+                        ) from retry_exc
+                if exc.code == 401:
                     raise RuntimeError(
                         f"WebDAV {method} {path} failed with HTTP 401 (Unauthorized). "
                         "Check [webdav] username/password and target path permissions."
-                    ) from retry_exc
-            if exc.code == 401:
-                raise RuntimeError(
-                    f"WebDAV {method} {path} failed with HTTP 401 (Unauthorized). "
-                    "Check [webdav] username/password and target path permissions."
-                ) from exc
-            raise RuntimeError(f"WebDAV {method} {path} failed with HTTP {exc.code}") from exc
-        except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
-            raise TransportError(
-                "WebDAV connection failed during transfer. "
-                "The target may be offline or unreachable."
-            ) from exc
+                    ) from exc
+                raise RuntimeError(f"WebDAV {method} {path} failed with HTTP {exc.code}") from exc
+            except (urllib.error.URLError, ConnectionResetError, TimeoutError, OSError) as exc:
+                if attempt >= attempts:
+                    raise TransportError(
+                        "WebDAV connection failed during transfer. "
+                        f"Retried {attempts} time(s) with timeout {self.timeout_seconds:.0f}s. "
+                        "The target may be offline, overloaded, or unreachable."
+                    ) from exc
+                logger.warning(
+                    "TransportWebDAV::_request: transient failure for %s %s on attempt %s/%s: %s",
+                    method,
+                    path,
+                    attempt,
+                    attempts,
+                    exc,
+                )
+                if self.retry_delay_seconds > 0:
+                    time.sleep(self.retry_delay_seconds)
 
     def _mkcol(self, path):
         try:

@@ -25,6 +25,12 @@ It handles playlists, ROMs, BIOS files, thumbnails, and shader presets. It can a
 - `webdav` for iOS or remote storage
 - `filesystem` for local export and manual transfer
 
+WebDAV tuning keys:
+- `webdav_max_workers` limits concurrent uploads. Use `1` for fragile targets.
+- `webdav_timeout_seconds` increases the per-request timeout for slow uploads.
+- `webdav_retries` retries transient WebDAV network failures.
+- `webdav_retry_delay_seconds` pauses briefly between retry attempts.
+
 ## Installation
 
 ### Using `uv`

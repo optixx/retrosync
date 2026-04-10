@@ -261,15 +261,18 @@ class CliRichReporter:
         system_steps_progress.update(task_id, advance=advance)
 
     def hide_system_steps(self, task_id):
-        system_steps_progress.update(task_id, visible=False)
+        system_steps_progress.stop_task(task_id)
 
     def add_step_task(self, *, action, name):
         return step_progress.add_task("", action=action, name=name)
 
     def finish_step_task(self, task_id):
-        step_progress.update(task_id, advance=1)
+        task = step_progress.tasks[task_id]
+        action = str(task.fields.get("action", "")).strip()
+        if action and not action.endswith(" done"):
+            action = f"{action} done"
+        step_progress.update(task_id, advance=1, action=action or "done")
         step_progress.stop_task(task_id)
-        step_progress.update(task_id, visible=False)
 
     def begin_transport_file_progress(self, total):
         begin_transport_file_progress(total)

@@ -340,6 +340,24 @@ def test_transport_webdav_reads_config():
     assert transport.password == "pass"
 
 
+def test_transport_webdav_reads_tuning_config():
+    default = {
+        "transport": "webdav",
+        "url": "http://dav.local:8080",
+        "username": "user",
+        "password": "pass",
+        "webdav_max_workers": "1",
+        "webdav_timeout_seconds": "120",
+        "webdav_retries": "3",
+        "webdav_retry_delay_seconds": "0.25",
+    }
+    transport = TransportWebDAV(default, dry_run=True)
+    assert transport.max_workers == 1
+    assert transport.timeout_seconds == 120.0
+    assert transport.retries == 3
+    assert transport.retry_delay_seconds == 0.25
+
+
 def test_transport_webdav_requires_url():
     default = {
         "transport": "webdav",
@@ -480,8 +498,31 @@ def test_transport_webdav_request_network_errors_map_to_transport_error():
     transport = TransportWebDAV(default, dry_run=False)
 
     with patch.object(transport, "_request_once", side_effect=urllib.error.URLError("offline")):
-        with pytest.raises(TransportError, match="target may be offline or unreachable"):
+        with pytest.raises(
+            TransportError, match="target may be offline, overloaded, or unreachable"
+        ):
             transport._request("PUT", "/Sync/file.bin", body=b"test")
+
+
+def test_transport_webdav_request_retries_transient_network_errors():
+    default = {
+        "transport": "webdav",
+        "url": "http://dav.local",
+        "username": "user",
+        "password": "pass",
+        "webdav_retries": "2",
+        "webdav_retry_delay_seconds": "0",
+    }
+    transport = TransportWebDAV(default, dry_run=False)
+
+    with patch.object(
+        transport,
+        "_request_once",
+        side_effect=[urllib.error.URLError("offline"), urllib.error.URLError("offline"), None],
+    ) as mock_request:
+        transport._request("PUT", "/Sync/file.bin", body=b"test")
+
+    assert mock_request.call_count == 3
 
 
 def test_transport_webdav_ensure_dir_exists_uses_cache_after_first_create():
