@@ -549,6 +549,20 @@ RUN_PRESETS = {
 }
 
 
+def resolve_action_targets(targets, target_map, *, command_name):
+    if not targets:
+        raise ValueError(f"At least one {command_name} target is required.")
+
+    normalized_targets = [str(target).strip().lower() for target in targets]
+    if "all" in normalized_targets and len(normalized_targets) > 1:
+        raise ValueError(f"'all' cannot be combined with other {command_name} targets.")
+
+    actions = set()
+    for target in normalized_targets:
+        actions.update(target_map[target])
+    return actions
+
+
 @click.group(name="retrosync.py", invoke_without_command=True)
 @click.option(
     "--config-file",
@@ -611,14 +625,15 @@ def list_systems_command(config_file, transport_override, transport_impl, yes, d
 
 @main.command("sync")
 @click.argument(
-    "target",
+    "targets",
     type=click.Choice(sorted(SYNC_TARGETS.keys()), case_sensitive=False),
+    nargs=-1,
 )
 @selection_options
 @common_runtime_options
 @handle_cli_errors
 def sync_command(
-    target,
+    targets,
     system_name,
     dry_run,
     config_file,
@@ -629,7 +644,7 @@ def sync_command(
 ):
     """Run copy-oriented sync actions."""
     execute_run(
-        actions=SYNC_TARGETS[target.lower()],
+        actions=resolve_action_targets(targets, SYNC_TARGETS, command_name="sync"),
         options=CliRuntimeOptions(
             config_file=resolve_config_file(config_file),
             transport_override=transport_override,

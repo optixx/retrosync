@@ -6,6 +6,7 @@ from retrosync import (
     ACTION_SYNC_PLAYLISTS,
     ACTION_SYNC_ROMS,
     ACTION_SYNC_SHADERS,
+    ACTION_SYNC_THUMBNAILS,
     ACTION_UPDATE_PLAYLISTS,
     ACTION_UPDATE_THUMBNAILS,
     main,
@@ -587,6 +588,65 @@ def test_sync_all_is_copy_only():
     assert ACTION_SYNC_SHADERS in run_cfg.actions
     assert ACTION_UPDATE_PLAYLISTS not in run_cfg.actions
     assert ACTION_UPDATE_THUMBNAILS not in run_cfg.actions
+
+
+def test_sync_accepts_multiple_targets():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "dest_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+            "dest_roms": "tests/assets/roms",
+            "src_thumbnails": "tests/assets",
+            "dest_thumbnails": "tests/assets",
+            "dest_retroarch_base": "/retroarch/config",
+        },
+        "shaders": [{"name": "Snes9x", "shader": "crt/test.slangp"}],
+        "playlists": [
+            {
+                "name": "Sony - PlayStation.lpl",
+                "src_folder": "psx",
+                "dest_folder": "psx",
+                "src_core_path": "core1",
+                "src_core_name": "Core 1",
+            }
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = invoke_cli(
+            [
+                "sync",
+                "roms",
+                "shaders",
+                "thumbnails",
+                "--dry-run",
+                "--yes",
+                "--config-file=ignored.conf",
+            ]
+        )
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert ACTION_SYNC_ROMS in run_cfg.actions
+    assert ACTION_SYNC_SHADERS in run_cfg.actions
+    assert ACTION_SYNC_THUMBNAILS in run_cfg.actions
+    assert ACTION_SYNC_PLAYLISTS not in run_cfg.actions
+
+
+def test_sync_rejects_all_combined_with_other_targets():
+    result = invoke_cli(["sync", "all", "roms", "--dry-run", "--yes", "--config-file=ignored.conf"])
+
+    assert result.exit_code == -1
+    assert "'all' cannot be combined with other sync targets." in result.output
 
 
 def test_run_full_includes_sync_and_update_actions():
