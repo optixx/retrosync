@@ -6,4 +6,5 @@ iphone.conf
 ipad.conf
 *.code-workspace
 .cache/
+.zcode/
 shaders*
