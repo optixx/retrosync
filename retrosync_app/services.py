@@ -3,6 +3,7 @@ from dataclasses import dataclass
 import json
 import platform
 from pathlib import Path
+import tomllib
 
 from retrosync_core.jobs import PlaylistUpdateJob, ThumbnailsUpdateJob
 from retrosync_core.config import (
@@ -22,6 +23,11 @@ from retrosync_core.transports import (
     TransportWebDAV,
     get_transport_mode,
 )
+
+
+def load_toml_file(path):
+    with open(path, "rb") as fh:
+        return tomllib.load(fh)
 
 
 @dataclass(frozen=True)

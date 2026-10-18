@@ -16,7 +16,6 @@ from functools import wraps
 from pathlib import Path
 
 import click
-import toml
 from rich.console import Console
 from rich.live import Live
 from rich.table import Table
@@ -85,6 +84,7 @@ from retrosync_app.services import (
     build_runner,
     filter_playlists,
     load_runtime_context,
+    load_toml_file,
     validate_run_request,
 )
 from retrosync_core.ui import (
@@ -424,7 +424,7 @@ def load_cli_runtime(
 ):
     configure_logging(options.do_debug)
     return load_runtime_context(
-        config_loader=toml.load,
+        config_loader=load_toml_file,
         config_file=options.config_file,
         transport_override=options.transport_override,
         apply_changes=apply_changes,

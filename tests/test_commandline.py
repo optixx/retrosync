@@ -71,7 +71,7 @@ def test_prompt_shows_multiple_matches_and_selection_runs_command():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -118,7 +118,7 @@ def test_yes_skips_prompt_and_uses_first_match():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
@@ -181,7 +181,7 @@ def test_transport_override_cli_sets_webdav_mode_for_factory():
     fake_runner = Mock()
     fake_runner_ctor = Mock(return_value=fake_runner)
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport) as factory_mock,
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -210,7 +210,7 @@ def test_transport_impl_unix_keeps_force_flag():
     fake_runner = Mock()
     fake_runner_ctor = Mock(return_value=fake_runner)
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport) as factory_mock,
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -249,7 +249,7 @@ def test_update_thumbnails_sets_action_and_forwards_system_filter():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
@@ -289,7 +289,7 @@ def test_sync_shaders_sets_action():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -321,7 +321,7 @@ def test_update_thumbnails_apply_requires_src_thumbnails():
         ],
     }
 
-    with patch("retrosync.toml.load", return_value=fake_config):
+    with patch("retrosync.load_toml_file", return_value=fake_config):
         result = invoke_cli(
             [
                 "update",
@@ -353,7 +353,7 @@ def test_update_thumbnails_cache_flags_are_forwarded_to_default_config():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Sony - PlayStation.lpl"]),
@@ -408,7 +408,7 @@ def test_targeted_update_playlists_ignores_unrelated_invalid_playlist_config():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
         patch("retrosync.rank_system_matches", return_value=["Quake II.lpl", "Quake III.lpl"]),
@@ -459,7 +459,7 @@ def test_sync_roms_advances_transport_file_progress_hooks():
             callback()
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.RomSyncJob", FakeRomSyncJob),
         patch("retrosync.begin_transport_file_progress") as begin_mock,
@@ -515,7 +515,7 @@ def test_sync_roms_falls_back_to_per_job_progress_when_no_per_file_callbacks():
                 callback()
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.RomSyncJob", FakeRomSyncJob),
         patch("retrosync.begin_transport_file_progress") as begin_mock,
@@ -575,7 +575,7 @@ def test_sync_all_is_copy_only():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -618,7 +618,7 @@ def test_sync_accepts_multiple_targets():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -686,7 +686,7 @@ def test_run_full_includes_sync_and_update_actions():
     fake_runner_ctor = Mock(return_value=fake_runner)
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory", return_value=fake_transport),
         patch("retrosync.SyncRunner", fake_runner_ctor),
     ):
@@ -728,7 +728,7 @@ def test_list_playlists_outputs_system_status_counts_and_paths(tmp_path):
         ],
     }
 
-    with patch("retrosync.toml.load", return_value=fake_config):
+    with patch("retrosync.load_toml_file", return_value=fake_config):
         result = invoke_cli(["list", "playlists", "--config-file=ignored.conf"])
 
     assert result.exit_code == 0, result.output
@@ -750,7 +750,7 @@ def test_list_playlists_does_not_create_transport():
     }
 
     with (
-        patch("retrosync.toml.load", return_value=fake_config),
+        patch("retrosync.load_toml_file", return_value=fake_config),
         patch("retrosync.TransportFactory") as factory_mock,
     ):
         result = invoke_cli(["list", "systems", "--config-file=ignored.conf"])

@@ -5,8 +5,6 @@ import time
 from dataclasses import replace
 from pathlib import Path
 
-import toml
-
 from .persistence import (
     DEFAULT_APP_STATE_PATH,
     PERSISTED_RUN_SETUP_FIELDS,
@@ -22,6 +20,7 @@ from .services import (
     build_run_config,
     build_runner,
     load_runtime_context,
+    load_toml_file,
     validate_run_request,
 )
 from .state import (
@@ -124,7 +123,7 @@ class RetrosyncAppController:
     def __init__(
         self,
         *,
-        toml_loader=toml.load,
+        toml_loader=load_toml_file,
         transport_factory=TransportFactory,
         runner_factory=SyncRunner,
         job_registry=None,
