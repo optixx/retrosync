@@ -7,4 +7,7 @@ ipad.conf
 *.code-workspace
 .cache/
 .zcode/
+dist/
+build/
+*.spec
 shaders*
