@@ -18,6 +18,7 @@ from lxml import html
 from rich.console import Console
 from rich.table import Table
 
+from . import steam as steam_library
 from .transports import TransportError
 
 logger = logging.getLogger()
@@ -282,6 +283,89 @@ class RomSyncJob(SystemJob):
         self.transport.copy_files(self.src, self.dst, **kwargs)
 
 
+def _config_bool(value):
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in ("1", "true", "yes", "on")
+
+
+# Steam lifecycle state shared across the system jobs of one run: the
+# adoption/restart dance runs once per process, after all writes.
+_STEAM_LIFECYCLE_STATE = {"finalized": False}
+
+
+def reset_steam_lifecycle_state():
+    _STEAM_LIFECYCLE_STATE["finalized"] = False
+
+
+def build_migrated_playlist(default, playlist, thumbnail_db_name, src_rom_roots):
+    """Load the local playlist and rewrite it for the target device.
+
+    Shared by the playlist sync job and the Steam library job: the migrated
+    document carries the target-side core path (``default_core_path``) and the
+    per-item ROM paths used to build Steam launch commands.
+    """
+    name = playlist.get("name")
+    logger.debug(f"build_migrated_playlist: name={name}")
+    local = Path(default.get("src_playlists")) / name
+    with open(local) as file:
+        data = json.load(file)
+
+    def source_variants(path):
+        """Path string variants to rewrite: as configured and symlink-resolved.
+
+        Playlists store literal source paths (e.g. ~/Dropbox/...), which on
+        macOS may sit behind a symlink to ~/Library/CloudStorage — matching
+        only the resolved form would silently skip the rewrite.
+        """
+        raw = str(path)
+        variants = [raw]
+        try:
+            resolved = str(Path(path).resolve())
+        except OSError:
+            resolved = raw
+        if resolved != raw:
+            variants.append(resolved)
+        return variants
+
+    core_path = data["default_core_path"].replace(
+        default.get("src_cores_suffix"), default.get("target_cores_suffix")
+    )
+    for src_cores in source_variants(Path(default.get("src_cores"))):
+        core_path = core_path.replace(src_cores, default.get("target_cores"))
+    target_rom_dir = Path(default.get("target_roms")) / playlist.get("dest_folder")
+    src_rom_dir_variants = []
+    for root in src_rom_roots:
+        src_rom_dir_variants.extend(source_variants(root / playlist.get("src_folder")))
+    data["default_core_path"] = core_path
+    data["scan_content_dir"] = str(target_rom_dir)
+    data["scan_dat_file_path"] = ""
+
+    items = []
+    src_items = data["items"]
+    src_items_len = len(src_items)
+    for idx, item in enumerate(src_items):
+        new_item = copy.copy(item)
+        new_item["core_name"] = "DETECT"
+        new_item["core_path"] = "DETECT"
+        new_item["db_name"] = thumbnail_db_name
+        src_path = new_item["path"].split("#")[0]
+        src_name = Path(src_path).name
+        logger.debug(
+            f"build_migrated_playlist: Convert [{idx + 1}/{src_items_len}] path={src_name}"
+        )
+        new_path = src_path
+        for src_rom_dir in src_rom_dir_variants:
+            new_path = new_path.replace(src_rom_dir, str(target_rom_dir))
+        new_item["path"] = new_path
+        items.append(new_item)
+
+    data["items"] = items
+    return data
+
+
 class PlaylistSyncJob(SystemJob):
     name = "Sync Playlist"
 
@@ -292,42 +376,12 @@ class PlaylistSyncJob(SystemJob):
         self.transfer_bytes = local.stat().st_size if local.exists() else 0
 
     def migrate_playlist(self, temp_file):
-        name = self.playlist.get("name")
-        logger.debug(f"migrate_playlist: name={name}")
-        local = Path(self.default.get("src_playlists")) / name
-        with open(local) as file:
-            data = json.load(file)
-
-        core_path = (
-            data["default_core_path"]
-            .replace(self.default.get("src_cores_suffix"), self.default.get("target_cores_suffix"))
-            .replace(self.default.get("src_cores"), self.default.get("target_cores"))
+        data = build_migrated_playlist(
+            self.default,
+            self.playlist,
+            self._thumbnail_db_name(),
+            self.get_src_rom_roots(),
         )
-        src_rom_dirs = [root / self.playlist.get("src_folder") for root in self.get_src_rom_roots()]
-        target_rom_dir = Path(self.default.get("target_roms")) / self.playlist.get("dest_folder")
-        data["default_core_path"] = core_path
-        data["scan_content_dir"] = str(target_rom_dir)
-        data["scan_dat_file_path"] = ""
-
-        items = []
-        src_items = data["items"]
-        src_items_len = len(src_items)
-        thumbnail_db_name = self._thumbnail_db_name()
-        for idx, item in enumerate(src_items):
-            new_item = copy.copy(item)
-            new_item["core_name"] = "DETECT"
-            new_item["core_path"] = "DETECT"
-            new_item["db_name"] = thumbnail_db_name
-            src_path = new_item["path"].split("#")[0]
-            src_name = Path(src_path).name
-            logger.debug(f"migrate_playlist: Convert [{idx + 1}/{src_items_len}] path={src_name}")
-            new_path = src_path
-            for src_rom_dir in src_rom_dirs:
-                new_path = new_path.replace(str(src_rom_dir), str(target_rom_dir))
-            new_item["path"] = new_path
-            items.append(new_item)
-
-        data["items"] = items
         doc = json.dumps(data)
         logger.debug(json.dumps(data, indent=2))
         temp_file.write(doc.encode("utf-8"))
@@ -346,6 +400,384 @@ class PlaylistSyncJob(SystemJob):
             )
         if callback:
             callback()
+
+
+class SteamLibrarySync(SystemJob):
+    """Create Steam shortcuts, collections and grid art for one playlist.
+
+    Writes the same files Steam ROM Manager manages (shortcuts.vdf, the
+    cloud-storage collections JSON and config/grid artwork) but only ever
+    touches entries tagged with the configured collection prefix, so
+    EmuDeck/SRM entries coexist untouched. Works while the Deck is in gaming
+    mode; collections become visible after the next Steam restart.
+    """
+
+    name = "Sync Steam Library"
+
+    def setup(self, playlist):
+        self.playlist = playlist
+        try:
+            data = build_migrated_playlist(
+                self.default,
+                self.playlist,
+                self._thumbnail_db_name(),
+                self.get_src_rom_roots(),
+            )
+            items = data.get("items", [])
+        except (OSError, KeyError, TypeError, ValueError):
+            items = []
+        self.size = len(items) + 1
+        transfer_bytes = 0
+        for item in items:
+            for source in self._collect_art_sources(str(item.get("label", ""))):
+                transfer_bytes += source.stat().st_size
+        self.transfer_bytes = transfer_bytes
+
+    def _collect_art_sources(self, label):
+        sources = []
+        for folder in ("Named_Boxarts", "Named_Snaps"):
+            path = self._art_source(folder, label)
+            if path is not None:
+                sources.append(path)
+        return sources
+
+    def _art_source(self, folder, label):
+        src_thumbnails = self.default.get("src_thumbnails")
+        label = str(label).strip()
+        if not src_thumbnails or not label:
+            return None
+        path = Path(src_thumbnails) / self._thumbnail_system_name() / folder / f"{label}.png"
+        return path if path.is_file() else None
+
+    def _steam_system_name(self):
+        configured = str(self.playlist.get("steam_category") or "").strip()
+        return configured or Path(self.playlist.get("name", "")).stem
+
+    def _resolve_account(self, steam_dir):
+        configured = str(self.default.get("steam_user") or "").strip()
+        if configured:
+            return configured
+        userdata = Path(steam_dir) / "userdata"
+        try:
+            entries = self.transport.list_dir(userdata)
+        except (FileNotFoundError, TransportError) as exc:
+            raise ValueError(
+                f"Steam userdata directory not found at {userdata}. "
+                "Check 'dest_steam_dir' in the config."
+            ) from exc
+        accounts = [entry for entry in entries if re.fullmatch(r"\d+", entry)]
+        if len(accounts) == 1:
+            return accounts[0]
+        if not accounts:
+            raise ValueError(
+                f"No Steam account directory found in {userdata}. Set 'steam_user' in the config."
+            )
+        raise ValueError(
+            f"Multiple Steam accounts found ({', '.join(accounts)}). "
+            "Set 'steam_user' in the config to disambiguate."
+        )
+
+    def _read_remote(self, path):
+        try:
+            return self.transport.read_file(Path(path))
+        except FileNotFoundError:
+            return None
+
+    def _write_remote(self, dest, payload, cancel_check=None):
+        with tempfile.NamedTemporaryFile() as temp_file:
+            temp_file.write(payload)
+            temp_file.flush()
+            self.transport.copy_file(Path(temp_file.name), Path(dest), cancel_check=cancel_check)
+
+    def do(self, callback=None, cancel_check=None):
+        default = self.default
+        prefix = (
+            str(default.get("steam_collection_prefix") or "").strip()
+            or steam_library.DEFAULT_COLLECTION_PREFIX
+        )
+        launchers_dir = str(default.get("steam_launchers_dir") or "").strip()
+        emulator = str(self.playlist.get("steam_emulator") or steam_library.DEFAULT_EMULATOR)
+        custom_command = (
+            str(self.playlist.get("steam_launch_command") or "").strip()
+            or str(default.get("steam_launch_args") or "").strip()
+            or None
+        )
+        umbrella = _config_bool(default.get("steam_umbrella_collection"))
+        self._reboot_deck = _config_bool(default.get("steam_reboot_deck"))
+        dry_run = bool(getattr(self.transport, "dry_run", False))
+        steam_dir = Path(default.get("dest_steam_dir"))
+
+        account = self._resolve_account(steam_dir)
+        config_dir = steam_dir / "userdata" / account / "config"
+
+        if custom_command is None:
+            launcher_path = steam_library.launcher_script_for(emulator, launchers_dir)
+            if self.transport.remote_file_exists(launcher_path) is False:
+                raise ValueError(
+                    f"Launcher script '{launcher_path}' not found on the target. "
+                    "Check 'steam_launchers_dir' and 'steam_emulator' in the config."
+                )
+
+        data = build_migrated_playlist(
+            default, self.playlist, self._thumbnail_db_name(), self.get_src_rom_roots()
+        )
+        core_path = str(data.get("default_core_path", ""))
+        tags = steam_library.collection_names_for(
+            self._steam_system_name(), prefix, umbrella=umbrella
+        )
+        desired = {}
+        for item in data.get("items", []):
+            label = str(item.get("label", "")).strip()
+            rom_path = str(item.get("path", "")).split("#")[0]
+            if not label or not rom_path:
+                continue
+            exe_field, start_dir = steam_library.build_launch_command(
+                emulator, launchers_dir, core_path, rom_path, custom_command=custom_command
+            )
+            unsigned, shortcut = steam_library.build_shortcut(label, exe_field, "", start_dir, tags)
+            desired[unsigned] = shortcut
+
+        rom_dir_prefix = str(Path(default.get("target_roms")) / self.playlist.get("dest_folder"))
+        shortcuts_path = config_dir / steam_library.SHORTCUTS_FILENAME
+        existing_bytes = self._read_remote(shortcuts_path)
+        existing_doc = steam_library.read_shortcuts_vdf(existing_bytes or b"")
+        new_doc, report = steam_library.reconcile_shortcuts(
+            existing_doc,
+            desired,
+            rom_dir_prefix=rom_dir_prefix,
+            prefix=prefix,
+            roms_base=str(default.get("target_roms") or "") or None,
+        )
+
+        if report.has_changes() and not dry_run:
+            self.transport.ensure_dir_exists(config_dir)
+            if existing_bytes:
+                self._write_remote(
+                    Path(str(shortcuts_path) + steam_library.BACKUP_SUFFIX),
+                    existing_bytes,
+                    cancel_check=cancel_check,
+                )
+            self._write_remote(
+                shortcuts_path,
+                steam_library.write_shortcuts_vdf(new_doc),
+                cancel_check=cancel_check,
+            )
+        if callback:
+            callback()
+
+        self._sync_collections(
+            config_dir,
+            desired,
+            report,
+            prefix,
+            umbrella,
+            dry_run,
+            cancel_check,
+            shortcut_ids={
+                entry["appid"] & steam_library.U32_MASK
+                for entry in new_doc["shortcuts"].values()
+                if isinstance(entry.get("appid"), int)
+            },
+        )
+
+        art_copied, art_present, art_missing = self._sync_artwork(
+            config_dir, desired, dry_run, callback, cancel_check
+        )
+
+        verb = "Would update" if dry_run else "Updated"
+        lines = [
+            f"{verb} Steam library for '{self._steam_system_name()}': {report.summary()}.",
+            "Collections: " + ", ".join(f"'{name}'" for name in tags) + ".",
+            f"Artwork: {art_copied} copied, {art_present} already present, "
+            f"{art_missing} without local thumbnails.",
+        ]
+        if not dry_run and existing_bytes and report.has_changes():
+            lines.append(f"Backup: {shortcuts_path.name}{steam_library.BACKUP_SUFFIX}")
+        self.add_deferred_message("\n".join(lines))
+
+    def _steam_pid_running(self):
+        run_remote = getattr(self.transport, "run_remote", None)
+        if not callable(run_remote):
+            return False
+        try:
+            returncode, stdout, _ = run_remote("pgrep -x steam || true")
+        except TransportError:
+            return False
+        return returncode == 0 and bool(stdout and stdout.strip())
+
+    def _shutdown_steam(self):
+        run_remote = getattr(self.transport, "run_remote", None)
+        if not callable(run_remote):
+            return
+        try:
+            run_remote("steam -shutdown || true", timeout=60)
+        except TransportError:
+            pass
+
+    def _reboot_target(self):
+        run_remote = getattr(self.transport, "run_remote", None)
+        if not callable(run_remote):
+            return
+        password = str(self.default.get("password") or "")
+        sudo = f"echo '{password}' | sudo -S systemctl reboot" if password else "true"
+        try:
+            run_remote(f"systemctl reboot 2>/dev/null || {sudo} 2>/dev/null || true", timeout=30)
+        except TransportError:
+            pass
+
+    def finalize(self):
+        """Report how the Steam changes become visible; optionally reboot.
+
+        Steam's collections are cloud-authoritative on current clients: a
+        running (or restarting) Steam ignores foreign writes to the
+        cloud-storage files, and the user-collections cache in
+        localconfig.vdf is an output of Steam's memory, never an input.
+        RetroSync still writes the cloud-storage files so the collections
+        appear when Steam performs a full cloud reconcile — observed when the
+        account was last synced from another platform. Shortcuts and artwork
+        apply on the next Steam restart regardless.
+        """
+        if _STEAM_LIFECYCLE_STATE["finalized"]:
+            return
+        _STEAM_LIFECYCLE_STATE["finalized"] = True
+        dry_run = bool(getattr(self.transport, "dry_run", False))
+        if dry_run:
+            return
+        self.add_final_deferred_message(
+            "Shortcuts and artwork appear after the next Steam restart. "
+            "Collections are cloud-managed by Steam: they show up when Steam "
+            "does a full cloud reconcile — typically after you next use Steam "
+            "on another device and return to the Deck — or create the "
+            "collection once via right-click -> Add to a collection."
+        )
+        if self._reboot_deck:
+            self.add_final_deferred_message(
+                "Deck reboot requested — the connection will drop and Steam comes back fresh."
+            )
+            self._reboot_target()
+
+    def _sync_collections(
+        self,
+        config_dir,
+        desired,
+        report,
+        prefix,
+        umbrella,
+        dry_run,
+        cancel_check=None,
+        shortcut_ids=None,
+    ):
+        cloud_dir = config_dir / steam_library.CLOUDSTORAGE_DIRNAME
+        namespaces_path = cloud_dir / steam_library.NAMESPACES_FILENAME
+        namespaces_bytes = self._read_remote(namespaces_path)
+        namespaces = None
+        if namespaces_bytes:
+            try:
+                namespaces = json.loads(namespaces_bytes)
+            except ValueError:
+                namespaces = None
+        namespace = steam_library.select_namespace(namespaces)
+        namespace_path = cloud_dir / f"cloud-storage-namespace-{namespace}.json"
+        namespace_bytes = self._read_remote(namespace_path)
+        namespace_data = []
+        if namespace_bytes:
+            try:
+                namespace_data = json.loads(namespace_bytes)
+            except ValueError:
+                namespace_data = []
+
+        desired_ids = set(desired)
+        removed_ids = report.removed_appids
+        # Collection members must reference shortcuts that exist after this
+        # run; drop ghosts left behind by entries deleted outside retrosync.
+        valid_ids = desired_ids | shortcut_ids
+        final_collections = {}
+        names = steam_library.collection_names_for(
+            self._steam_system_name(), prefix, umbrella=umbrella
+        )
+        for name in names:
+            existing = steam_library.collection_membership(namespace_data, name)
+            final_collections[name] = ((existing - removed_ids) | desired_ids) & valid_ids
+        collections = {
+            name: members
+            for name, members in final_collections.items()
+            if members != steam_library.collection_membership(namespace_data, name)
+        }
+
+        merged_data = namespace_data
+        if collections:
+            merged_data = steam_library.merge_collection_namespace(
+                merged_data, collections, prefix=prefix, timestamp=int(time.time())
+            )
+        if not umbrella:
+            umbrella_name = str(prefix).strip() or steam_library.DEFAULT_COLLECTION_PREFIX
+            if steam_library.collection_membership(merged_data, umbrella_name) & removed_ids:
+                merged_data, _ = steam_library.remove_collection_members(
+                    merged_data, umbrella_name, removed_ids
+                )
+
+        if dry_run:
+            return
+
+        if merged_data != namespace_data:
+            timestamp = int(time.time())
+            self.transport.ensure_dir_exists(cloud_dir)
+            if namespace_bytes:
+                self._write_remote(
+                    Path(str(namespace_path) + steam_library.BACKUP_SUFFIX),
+                    namespace_bytes,
+                    cancel_check=cancel_check,
+                )
+            self._write_remote(namespace_path, steam_library.dumps_json(merged_data), cancel_check)
+            if namespaces_bytes is None:
+                self._write_remote(
+                    namespaces_path,
+                    steam_library.dumps_json([[namespace, str(timestamp)]]),
+                    cancel_check,
+                )
+
+    def _sync_artwork(self, config_dir, desired, dry_run, callback=None, cancel_check=None):
+        grid_dir = config_dir / steam_library.GRID_DIRNAME
+        art_map = (
+            ("Named_Boxarts", "p.png"),
+            ("Named_Snaps", "_hero.png"),
+        )
+        copied = present = missing = 0
+        for unsigned in sorted(desired):
+            shortcut = desired[unsigned]
+            label = shortcut["appname"]
+            for folder, suffix in art_map:
+                source = self._art_source(folder, label)
+                if source is None:
+                    if folder == "Named_Boxarts":
+                        missing += 1
+                    continue
+                dest = grid_dir / f"{unsigned}{suffix}"
+                if self.transport.remote_file_exists(dest):
+                    present += 1
+                    continue
+                if not dry_run:
+                    self.transport.ensure_dir_exists(grid_dir)
+                    self.transport.copy_file(source, dest, cancel_check=cancel_check)
+                copied += 1
+                if callback:
+                    callback()
+        return copied, present, missing
+
+    def _steam_running_warning(self):
+        run_capture = getattr(self.transport, "run_capture", None)
+        if not callable(run_capture):
+            return None
+        try:
+            returncode, stdout, _ = run_capture("pgrep -x steam || true")
+        except TransportError:
+            return None
+        if returncode == 0 and stdout and stdout.strip():
+            return (
+                "Steam is running: shortcuts and artwork apply immediately, but "
+                "collections only appear in the library after Steam restarts."
+            )
+        return None
 
 
 class PlaylistUpdateJob(SystemJob):

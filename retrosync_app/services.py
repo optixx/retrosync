@@ -103,6 +103,7 @@ def build_run_config(
     do_sync_thumbnails=False,
     do_sync_roms=False,
     do_sync_shaders=False,
+    do_sync_steam=False,
     do_update_playlists=False,
     do_update_thumbnails=False,
     dry_run=False,
@@ -115,6 +116,7 @@ def build_run_config(
         do_sync_thumbnails=do_sync_thumbnails,
         do_sync_roms=do_sync_roms,
         do_sync_shaders=do_sync_shaders,
+        do_sync_steam=do_sync_steam,
         do_update_playlists=do_update_playlists,
         do_update_thumbnails=do_update_thumbnails,
         dry_run=dry_run,
@@ -243,6 +245,9 @@ def build_preview_plan(
                 )
             )
 
+        if run_cfg.do_sync_steam:
+            rows.extend(_plan_steam_rows(default=default, playlist=playlist, system=system))
+
         if run_cfg.do_update_playlists:
             rows.extend(_plan_playlist_update_rows(default=default, playlist=playlist))
 
@@ -314,6 +319,68 @@ def _plan_recursive_copy(*, action, system, src_root, dest_root, default, capabi
                 source=str(filename),
                 destination=str(dest_root / relative),
                 size_bytes=_safe_size(filename),
+            )
+        )
+    return rows
+
+
+def _plan_steam_rows(*, default, playlist, system):
+    steam_dir = default.get("dest_steam_dir")
+    if not steam_dir:
+        return []
+    account = str(default.get("steam_user") or "").strip() or "<account>"
+    config_dir = Path(steam_dir) / "userdata" / account / "config"
+    playlist_path = Path(default.get("src_playlists", "")) / str(playlist.get("name", ""))
+    try:
+        labels = [
+            str(item.get("label", ""))
+            for item in json.loads(playlist_path.read_text(encoding="utf-8")).get("items", [])
+        ]
+    except (OSError, ValueError):
+        labels = []
+    prefix = str(default.get("steam_collection_prefix") or "").strip() or "RetroSync"
+    category = str(playlist.get("steam_category") or "").strip() or system
+    collections = f"'{prefix}' and '{prefix} / {category}'"
+    rows = [
+        PreviewPlanRow(
+            action="sync_steam",
+            operation="rewrite",
+            system=system,
+            source=str(playlist_path),
+            destination=str(config_dir / "shortcuts.vdf"),
+            size_bytes=_safe_size(playlist_path),
+            details=f"Create/update {len(labels)} Steam shortcuts in collections {collections}.",
+        ),
+        PreviewPlanRow(
+            action="sync_steam",
+            operation="rewrite",
+            system=system,
+            source=str(playlist_path),
+            destination=str(config_dir / "cloudstorage"),
+            details=f"Merge collection membership for {collections}.",
+        ),
+    ]
+    thumbnails = default.get("src_thumbnails")
+    if thumbnails and labels:
+        thumbnail_system = str(playlist.get("thumbnail_system") or "").strip() or system
+        system_dir = Path(thumbnails) / thumbnail_system
+        art_bytes = 0
+        art_count = 0
+        for label in labels:
+            for folder in ("Named_Boxarts", "Named_Snaps"):
+                candidate = system_dir / folder / f"{label}.png"
+                if candidate.is_file():
+                    art_count += 1
+                    art_bytes += candidate.stat().st_size
+        rows.append(
+            PreviewPlanRow(
+                action="sync_steam",
+                operation="copy",
+                system=system,
+                source=str(system_dir),
+                destination=str(config_dir / "grid"),
+                size_bytes=art_bytes,
+                details=f"{art_count} artwork files (cover and hero images).",
             )
         )
     return rows

@@ -172,3 +172,44 @@ def test_validate_runtime_config_requires_shader_field_for_sync_shaders():
             do_update_playlists=False,
             do_update_thumbnails=False,
         )
+
+
+def test_validate_runtime_config_requires_dest_steam_dir_for_sync_steam():
+    default = _base_default()
+
+    with pytest.raises(ValueError, match="'dest_steam_dir' is required for --sync-steam"):
+        validate_runtime_config(
+            default,
+            _base_playlists(),
+            [],
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_thumbnails=False,
+            do_sync_roms=False,
+            do_sync_shaders=False,
+            do_sync_steam=True,
+            do_update_playlists=False,
+            do_update_thumbnails=False,
+        )
+
+
+def test_validate_runtime_config_rejects_webdav_for_sync_steam():
+    default = _base_default()
+    default["transport"] = "webdav"
+    default["url"] = "http://example.org"
+    default["dest_steam_dir"] = "/deck/.steam/steam"
+
+    with pytest.raises(ValueError, match="must be filesystem or ssh for --sync-steam"):
+        validate_runtime_config(
+            default,
+            _base_playlists(),
+            [],
+            do_sync_playlists=False,
+            do_sync_bios=False,
+            do_sync_thumbnails=False,
+            do_sync_roms=False,
+            do_sync_shaders=False,
+            do_sync_steam=True,
+            do_update_playlists=False,
+            do_update_thumbnails=False,
+        )

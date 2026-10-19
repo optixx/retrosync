@@ -13,6 +13,7 @@ from .jobs import (
     PlaylistUpdateJob,
     RomSyncJob,
     ShaderSync,
+    SteamLibrarySync,
     ThumbnailsUpdateJob,
     ThumbnailsSync,
 )
@@ -25,6 +26,7 @@ ACTION_SYNC_BIOS = "sync_bios"
 ACTION_SYNC_THUMBNAILS = "sync_thumbnails"
 ACTION_SYNC_ROMS = "sync_roms"
 ACTION_SYNC_SHADERS = "sync_shaders"
+ACTION_SYNC_STEAM = "sync_steam"
 ACTION_UPDATE_PLAYLISTS = "update_playlists"
 ACTION_UPDATE_THUMBNAILS = "update_thumbnails"
 
@@ -35,6 +37,7 @@ ALL_ACTIONS = frozenset(
         ACTION_SYNC_THUMBNAILS,
         ACTION_SYNC_ROMS,
         ACTION_SYNC_SHADERS,
+        ACTION_SYNC_STEAM,
         ACTION_UPDATE_PLAYLISTS,
         ACTION_UPDATE_THUMBNAILS,
     }
@@ -46,6 +49,7 @@ SYNC_ACTIONS = frozenset(
         ACTION_SYNC_THUMBNAILS,
         ACTION_SYNC_ROMS,
         ACTION_SYNC_SHADERS,
+        ACTION_SYNC_STEAM,
     }
 )
 UPDATE_ACTIONS = frozenset({ACTION_UPDATE_PLAYLISTS, ACTION_UPDATE_THUMBNAILS})
@@ -56,6 +60,7 @@ SYSTEM_ACTIONS = frozenset(
         ACTION_UPDATE_THUMBNAILS,
         ACTION_SYNC_PLAYLISTS,
         ACTION_SYNC_ROMS,
+        ACTION_SYNC_STEAM,
     }
 )
 
@@ -83,6 +88,7 @@ class SyncRunConfig:
         do_sync_thumbnails=False,
         do_sync_roms=False,
         do_sync_shaders=False,
+        do_sync_steam=False,
         do_update_playlists=False,
         do_update_thumbnails=False,
         dry_run=False,
@@ -99,6 +105,8 @@ class SyncRunConfig:
             normalized_actions.add(ACTION_SYNC_ROMS)
         if do_sync_shaders:
             normalized_actions.add(ACTION_SYNC_SHADERS)
+        if do_sync_steam:
+            normalized_actions.add(ACTION_SYNC_STEAM)
         if do_update_playlists:
             normalized_actions.add(ACTION_UPDATE_PLAYLISTS)
         if do_update_thumbnails:
@@ -138,6 +146,10 @@ class SyncRunConfig:
         return self.includes(ACTION_SYNC_SHADERS)
 
     @property
+    def do_sync_steam(self):
+        return self.includes(ACTION_SYNC_STEAM)
+
+    @property
     def do_update_playlists(self):
         return self.includes(ACTION_UPDATE_PLAYLISTS)
 
@@ -155,6 +167,7 @@ class JobRegistry:
     playlist_update_job: type = PlaylistUpdateJob
     thumbnails_update_job: type = ThumbnailsUpdateJob
     rom_sync_job: type = RomSyncJob
+    steam_library_sync: type = SteamLibrarySync
 
 
 class SyncReporter(Protocol):
@@ -298,6 +311,9 @@ class SyncRunner:
 
         if cfg.includes(ACTION_SYNC_ROMS):
             system_jobs.append(self.job_registry.rom_sync_job(self.default, self.transport))
+
+        if cfg.includes(ACTION_SYNC_STEAM):
+            system_jobs.append(self.job_registry.steam_library_sync(self.default, self.transport))
 
         playlists = self.playlists
         if system_name:
@@ -547,6 +563,13 @@ class SyncRunner:
                         f"{len(systems)} systems processed ({format_transfer_size(total_transfer_bytes)}), done!"
                     ),
                 )
+
+            for job in system_jobs:
+                finalize = getattr(job, "finalize", None)
+                if callable(finalize):
+                    finalize()
+                    self._collect_final_deferred_messages([job], final_deferred_output_messages)
+
             self.reporter.hide_transport_tasks()
             self._emit(EventType.RUN_FINISHED, bytes_estimated=total_transfer_bytes)
         except SyncAbortError as exc:

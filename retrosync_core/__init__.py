@@ -21,6 +21,7 @@ from .jobs import (
     PlaylistUpdateJob,
     PlaylistUpdatecJob,
     RomSyncJob,
+    SteamLibrarySync,
     SystemJob,
     ThumbnailsSync,
 )
@@ -77,6 +78,7 @@ __all__ = [
     "PlaylistSyncJob",
     "PlaylistUpdateJob",
     "PlaylistUpdatecJob",
+    "SteamLibrarySync",
     "RuntimeConfigModel",
     "PlaylistConfigModel",
     "expand_config",

@@ -38,6 +38,7 @@ from retrosync_core.jobs import (
     PlaylistUpdatecJob,
     RomSyncJob,
     ShaderSync,
+    SteamLibrarySync,
     SystemJob,
     ThumbnailsUpdateJob,
     ThumbnailsSync,
@@ -53,6 +54,7 @@ from retrosync_core.runner import (
     ACTION_SYNC_PLAYLISTS,
     ACTION_SYNC_ROMS,
     ACTION_SYNC_SHADERS,
+    ACTION_SYNC_STEAM,
     ACTION_SYNC_THUMBNAILS,
     ACTION_UPDATE_PLAYLISTS,
     ACTION_UPDATE_THUMBNAILS,
@@ -130,6 +132,7 @@ __all__ = [
     "PlaylistUpdateJob",
     "PlaylistUpdatecJob",
     "ThumbnailsUpdateJob",
+    "SteamLibrarySync",
     "RuntimeConfigModel",
     "PlaylistConfigModel",
     "expand_config",
@@ -380,6 +383,19 @@ def thumbnail_update_options(command):
     return wrapper
 
 
+def steam_sync_options(command):
+    @click.option(
+        "--reboot-deck",
+        is_flag=True,
+        help="Reboot the Deck after the Steam library sync",
+    )
+    @wraps(command)
+    def wrapper(*args, **kwargs):
+        return command(*args, **kwargs)
+
+    return wrapper
+
+
 def configure_logging(do_debug):
     global logger
     if do_debug:
@@ -463,6 +479,7 @@ def execute_run(
     apply_changes=False,
     refresh_thumbnail_cache=False,
     no_thumbnail_cache=False,
+    reboot_deck=False,
 ):
     if not actions:
         raise ValueError("At least one action is required.")
@@ -470,6 +487,8 @@ def execute_run(
         raise ValueError("--apply requires a command that includes thumbnail updates.")
     if (refresh_thumbnail_cache or no_thumbnail_cache) and ACTION_UPDATE_THUMBNAILS not in actions:
         raise ValueError("Thumbnail cache flags require a command that includes thumbnail updates.")
+    if reboot_deck and ACTION_SYNC_STEAM not in actions:
+        raise ValueError("--reboot-deck requires a command that includes the steam target.")
 
     context = load_cli_runtime(
         options=options,
@@ -478,6 +497,8 @@ def execute_run(
         no_thumbnail_cache=no_thumbnail_cache,
     )
     default = context.default
+    if reboot_deck:
+        default["steam_reboot_deck"] = True
     playlists = context.playlists
     selected_system = resolve_system_name(playlists, system_name=system_name, yes=options.yes)
     validation_playlists = filter_playlists(playlists, system_name=selected_system)
@@ -502,6 +523,7 @@ def execute_run(
             playlist_update_job=PlaylistUpdateJob,
             thumbnails_update_job=ThumbnailsUpdateJob,
             rom_sync_job=RomSyncJob,
+            steam_library_sync=SteamLibrarySync,
         ),
         transport_factory=TransportFactory,
         runner_factory=SyncRunner,
@@ -535,7 +557,8 @@ SYNC_TARGETS = {
     "thumbnails": {ACTION_SYNC_THUMBNAILS},
     "roms": {ACTION_SYNC_ROMS},
     "shaders": {ACTION_SYNC_SHADERS},
-    "all": set(SYNC_ACTIONS),
+    "steam": {ACTION_SYNC_STEAM},
+    "all": set(SYNC_ACTIONS) - {ACTION_SYNC_STEAM},
 }
 UPDATE_TARGETS = {
     "playlists": {ACTION_UPDATE_PLAYLISTS},
@@ -543,9 +566,9 @@ UPDATE_TARGETS = {
     "all": set(UPDATE_ACTIONS),
 }
 RUN_PRESETS = {
-    "sync": set(SYNC_ACTIONS),
+    "sync": set(SYNC_ACTIONS) - {ACTION_SYNC_STEAM},
     "update": set(UPDATE_ACTIONS),
-    "full": set(ALL_ACTIONS),
+    "full": set(ALL_ACTIONS) - {ACTION_SYNC_STEAM},
 }
 
 
@@ -629,11 +652,13 @@ def list_systems_command(config_file, transport_override, transport_impl, yes, d
     type=click.Choice(sorted(SYNC_TARGETS.keys()), case_sensitive=False),
     nargs=-1,
 )
+@steam_sync_options
 @selection_options
 @common_runtime_options
 @handle_cli_errors
 def sync_command(
     targets,
+    reboot_deck,
     system_name,
     dry_run,
     config_file,
@@ -654,6 +679,7 @@ def sync_command(
         ),
         system_name=system_name,
         dry_run=dry_run,
+        reboot_deck=reboot_deck,
     )
 
 

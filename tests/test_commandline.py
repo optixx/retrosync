@@ -758,3 +758,52 @@ def test_list_playlists_does_not_create_transport():
     assert result.exit_code == 0, result.output
     factory_mock.assert_not_called()
     assert "Nintendo - NES" in result.output
+
+
+def test_sync_steam_target_dispatches_steam_action():
+    fake_config = {
+        "default": {
+            "transport": "filesystem",
+            "src_playlists": "tests/assets/playlists",
+            "src_roms": ["tests/assets/roms"],
+            "src_cores": "tests/assets/cores",
+            "src_cores_suffix": ".dylib",
+            "target_cores": "/deck/cores",
+            "target_cores_suffix": ".so",
+            "target_roms": "/deck/roms",
+            "dest_steam_dir": "/deck/.steam/steam",
+        },
+        "playlists": [
+            {
+                "name": "Nintendo - SNES.lpl",
+                "src_folder": "snes",
+                "dest_folder": "snes",
+                "src_core_path": "core2",
+                "src_core_name": "Core 2",
+            },
+        ],
+    }
+    fake_transport = Mock()
+    fake_runner = Mock()
+    fake_runner_ctor = Mock(return_value=fake_runner)
+
+    with (
+        patch("retrosync.load_toml_file", return_value=fake_config),
+        patch("retrosync.TransportFactory", return_value=fake_transport),
+        patch("retrosync.SyncRunner", fake_runner_ctor),
+    ):
+        result = invoke_cli(["sync", "steam", "--dry-run", "--yes", "--config-file=ignored.conf"])
+
+    assert result.exit_code == 0, result.output
+    run_cfg = fake_runner.run.call_args.args[0]
+    assert run_cfg.do_sync_steam
+    assert not run_cfg.do_sync_playlists
+
+
+def test_run_presets_exclude_steam_action():
+    from retrosync import ACTION_SYNC_STEAM, RUN_PRESETS, SYNC_TARGETS
+
+    assert ACTION_SYNC_STEAM in SYNC_TARGETS["steam"]
+    assert ACTION_SYNC_STEAM not in SYNC_TARGETS["all"]
+    for actions in RUN_PRESETS.values():
+        assert ACTION_SYNC_STEAM not in actions

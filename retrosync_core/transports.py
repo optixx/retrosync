@@ -140,6 +140,19 @@ class TransportBase:
         _ = path
         return None
 
+    def read_file(self, path: Path):
+        raise TransportError(f"Transport {type(self).__name__} cannot read files.")
+
+    def list_dir(self, path: Path):
+        raise TransportError(f"Transport {type(self).__name__} cannot list directories.")
+
+    def run_capture(self, cmd, timeout=120):
+        raise TransportError(f"Transport {type(self).__name__} cannot capture command output.")
+
+    def run_remote(self, cmd, timeout=120):
+        """Run a shell command on the target and return (rc, stdout, stderr)."""
+        return self.run_capture(cmd, timeout=timeout)
+
 
 class TransportUnixBase(TransportBase):
     capabilities = TransportCapabilities(
@@ -217,6 +230,25 @@ class TransportUnixBase(TransportBase):
                     poll.unregister(rfd)
         p.wait()
 
+    def run_capture(self, cmd, timeout=120):
+        """Run a shell command and return (returncode, stdout, stderr).
+
+        Unlike execute() this captures output; it is used for read-only remote
+        queries (base64/ls/test/pgrep) and therefore also runs in dry-run mode.
+        """
+        logger.debug(f"run_capture: cmd={cmd}")
+        try:
+            completed = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                timeout=timeout,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise TransportError(f"Command timed out after {timeout}s: {cmd}") from exc
+        return completed.returncode, completed.stdout, completed.stderr
+
     def copy_files(
         self,
         src_path: Path,
@@ -256,6 +288,25 @@ class TransportFileSystemUnix(TransportUnixBase):
         if not self.dry_run:
             shutil.copy(src_filename, dest_filename)
 
+    def read_file(self, path: Path):
+        try:
+            return Path(path).read_bytes()
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            raise TransportError(f"Failed to read {path}: {exc}") from exc
+
+    def list_dir(self, path: Path):
+        try:
+            return sorted(item.name for item in Path(path).iterdir())
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            raise TransportError(f"Failed to list {path}: {exc}") from exc
+
+    def remote_file_exists(self, path: Path):
+        return Path(path).exists()
+
 
 class TransportSSHUnix(TransportUnixBase):
     def check(self):
@@ -282,6 +333,48 @@ class TransportSSHUnix(TransportUnixBase):
         username = self.default.get("username")
         cmd = f"{self.command_prefix()} ssh {username}@{hostname} \"mkdir '{path_directory}'\""
         self.execute(cmd)
+
+    def _remote(self, command, timeout=120):
+        hostname = self.default.get("hostname")
+        username = self.default.get("username")
+        cmd = f'{self.command_prefix()} ssh {username}@{hostname} "{command}"'
+        return self.run_capture(cmd, timeout=timeout)
+
+    def read_file(self, path: Path):
+        returncode, stdout, stderr = self._remote(f'base64 "{path}"')
+        if returncode != 0:
+            message = stderr.decode("utf-8", "replace")
+            if "No such file" in message or "not found" in message.lower():
+                raise FileNotFoundError(str(path))
+            raise TransportError(f"Failed to read {path} via ssh: {message.strip()}")
+        try:
+            return base64.b64decode(stdout)
+        except ValueError as exc:
+            raise TransportError(f"Failed to decode remote file {path}: {exc}") from exc
+
+    def list_dir(self, path: Path):
+        returncode, stdout, stderr = self._remote(f'ls -1 "{path}"')
+        if returncode != 0:
+            message = stderr.decode("utf-8", "replace")
+            if "No such file" in message or "not found" in message.lower():
+                raise FileNotFoundError(str(path))
+            raise TransportError(f"Failed to list {path} via ssh: {message.strip()}")
+        return [line for line in stdout.decode("utf-8", "replace").splitlines() if line]
+
+    def remote_file_exists(self, path: Path):
+        returncode, _, _ = self._remote(f'test -e "{path}"')
+        if returncode == 0:
+            return True
+        if returncode == 1:
+            return False
+        return None
+
+    def run_remote(self, cmd, timeout=120):
+        returncode, stdout, stderr = self._remote(cmd, timeout=timeout)
+        message = stderr.decode("utf-8", "replace").strip()
+        if returncode != 0 and message:
+            logger.debug("TransportSSHUnix::run_remote: %s -> %s", cmd, message)
+        return returncode, stdout, stderr
 
 
 class TransportWindowsBase(TransportBase):
@@ -739,6 +832,22 @@ class TransportFileSystemWindows(TransportWindowsBase):
                 if not self.dry_run:
                     shutil.copy2(s, d)
 
+    def read_file(self, path: Path):
+        try:
+            return Path(path).read_bytes()
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            raise TransportError(f"Failed to read {path}: {exc}") from exc
+
+    def list_dir(self, path: Path):
+        try:
+            return sorted(item.name for item in Path(path).iterdir())
+        except FileNotFoundError:
+            raise
+        except OSError as exc:
+            raise TransportError(f"Failed to list {path}: {exc}") from exc
+
 
 class TransportSSHWindows(TransportWindowsBase):
     capabilities = TransportCapabilities(
@@ -890,3 +999,39 @@ class TransportSSHWindows(TransportWindowsBase):
                     )
                 if callback:
                     callback()
+
+    def read_file(self, path: Path):
+        if self.dry_run or not self.connected:
+            self.connect()
+        if self.dry_run:
+            return b""
+        with self.sftp.open(str(path), "rb") as handle:
+            return handle.read()
+
+    def list_dir(self, path: Path):
+        if self.dry_run or not self.connected:
+            self.connect()
+        if self.dry_run:
+            return []
+        return sorted(item.filename for item in self.sftp.listdir_attr(str(path)))
+
+    def remote_file_exists(self, path: Path):
+        if self.dry_run or not self.connected:
+            self.connect()
+        if self.dry_run:
+            return False
+        try:
+            self.sftp.stat(str(path))
+            return True
+        except FileNotFoundError:
+            return False
+
+    def run_capture(self, cmd, timeout=120):
+        if self.dry_run or not self.connected:
+            self.connect()
+        if self.dry_run:
+            return 0, b"", b""
+        _, stdout, stderr = self.ssh.exec_command(cmd, timeout=timeout)
+        output = stdout.read()
+        error = stderr.read()
+        return stdout.channel.recv_exit_status(), output, error

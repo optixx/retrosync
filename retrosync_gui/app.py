@@ -153,6 +153,7 @@ class RetrosyncGuiApp:
                         ("do_sync_bios", "Sync BIOS"),
                         ("do_sync_shaders", "Sync shaders"),
                         ("do_sync_thumbnails", "Sync thumbnails"),
+                        ("do_sync_steam", "Sync Steam library"),
                         ("do_update_playlists", "Update playlists"),
                         ("do_update_thumbnails", "Update thumbnails"),
                         ("apply_changes", "Apply thumbnail changes"),
@@ -374,6 +375,7 @@ class RetrosyncGuiApp:
             "do_sync_bios",
             "do_sync_shaders",
             "do_sync_thumbnails",
+            "do_sync_steam",
             "do_update_playlists",
             "do_update_thumbnails",
             "apply_changes",
@@ -393,6 +395,7 @@ class RetrosyncGuiApp:
                 ("do_sync_bios", "BIOS"),
                 ("do_sync_shaders", "shaders"),
                 ("do_sync_thumbnails", "thumbnails"),
+                ("do_sync_steam", "Steam library"),
                 ("do_update_playlists", "update playlists"),
                 ("do_update_thumbnails", "update thumbnails"),
             ]
@@ -598,6 +601,7 @@ class RetrosyncGuiApp:
                 "do_sync_bios",
                 "do_sync_shaders",
                 "do_sync_thumbnails",
+                "do_sync_steam",
                 "do_update_playlists",
                 "do_update_thumbnails",
             ]

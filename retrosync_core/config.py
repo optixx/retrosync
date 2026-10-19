@@ -4,11 +4,13 @@ import Levenshtein
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from .paths import expand_user_path, expand_user_path_list, retroarch_derived_paths
+from .steam import EMULATOR_LAUNCHERS
 from .runner import (
     ACTION_SYNC_BIOS,
     ACTION_SYNC_PLAYLISTS,
     ACTION_SYNC_ROMS,
     ACTION_SYNC_SHADERS,
+    ACTION_SYNC_STEAM,
     ACTION_SYNC_THUMBNAILS,
     ACTION_UPDATE_PLAYLISTS,
     ACTION_UPDATE_THUMBNAILS,
@@ -39,6 +41,12 @@ class RuntimeConfigModel(BaseModel):
     target_roms: str | None = None
     target_cores: str | None = None
     target_cores_suffix: str | None = None
+    dest_steam_dir: str | None = None
+    steam_user: str | None = None
+    steam_launchers_dir: str | None = None
+    steam_launch_args: str | None = None
+    steam_collection_prefix: str | None = None
+    steam_umbrella_collection: bool | None = None
 
 
 class PlaylistConfigModel(BaseModel):
@@ -49,6 +57,8 @@ class PlaylistConfigModel(BaseModel):
     dest_folder: str | None = None
     src_core_path: str | None = None
     src_core_name: str | None = None
+    steam_emulator: str | None = None
+    steam_launch_command: str | None = None
     disabled: bool = False
 
 
@@ -183,6 +193,8 @@ def expand_config(default):
         "dest_config",
         "dest_roms",
         "dest_thumbnails",
+        "dest_steam_dir",
+        "steam_launchers_dir",
     ]:
         if default.get(item) is not None:
             default[item] = expand_user_path(default.get(item))
@@ -245,6 +257,7 @@ def validate_runtime_config(
     do_sync_thumbnails: bool = False,
     do_sync_roms: bool = False,
     do_sync_shaders: bool = False,
+    do_sync_steam: bool = False,
     do_update_playlists: bool = False,
     do_update_thumbnails: bool = False,
 ):
@@ -254,6 +267,7 @@ def validate_runtime_config(
     do_sync_thumbnails = do_sync_thumbnails or ACTION_SYNC_THUMBNAILS in action_set
     do_sync_roms = do_sync_roms or ACTION_SYNC_ROMS in action_set
     do_sync_shaders = do_sync_shaders or ACTION_SYNC_SHADERS in action_set
+    do_sync_steam = do_sync_steam or ACTION_SYNC_STEAM in action_set
     do_update_playlists = do_update_playlists or ACTION_UPDATE_PLAYLISTS in action_set
     do_update_thumbnails = do_update_thumbnails or ACTION_UPDATE_THUMBNAILS in action_set
 
@@ -309,7 +323,11 @@ def validate_runtime_config(
         require_default("dest_bios", "--sync-bios")
 
     needs_system_jobs = (
-        do_sync_playlists or do_sync_roms or do_update_playlists or do_update_thumbnails
+        do_sync_playlists
+        or do_sync_roms
+        or do_sync_steam
+        or do_update_playlists
+        or do_update_thumbnails
     )
 
     if do_sync_thumbnails:
@@ -357,6 +375,27 @@ def validate_runtime_config(
         require_default("target_cores", "--sync-playlists")
         require_default("src_cores_suffix", "--sync-playlists")
         require_default("target_cores_suffix", "--sync-playlists")
+
+    if do_sync_steam and parsed_playlists:
+        if runtime.transport == "webdav":
+            errors.append("[default] 'transport' must be filesystem or ssh for --sync-steam")
+        require_default("dest_steam_dir", "--sync-steam")
+        require_default("src_playlists", "--sync-steam")
+        require_default("src_roms", "--sync-steam")
+        require_default("target_roms", "--sync-steam")
+        require_default("src_cores", "--sync-steam")
+        require_default("target_cores", "--sync-steam")
+        require_default("src_cores_suffix", "--sync-steam")
+        require_default("target_cores_suffix", "--sync-steam")
+        for idx, playlist in enumerate(parsed_playlists, start=1):
+            if playlist.disabled:
+                continue
+            emulator = str(playlist.steam_emulator or "").strip().lower()
+            if emulator and emulator not in EMULATOR_LAUNCHERS:
+                errors.append(
+                    f"[playlists][{idx}] unknown steam_emulator '{playlist.steam_emulator}'. "
+                    f"Use one of: {', '.join(sorted(EMULATOR_LAUNCHERS))}"
+                )
 
     if do_update_playlists and parsed_playlists:
         require_default("src_playlists", "--update-playlists")

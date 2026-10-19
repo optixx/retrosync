@@ -16,6 +16,21 @@ target_roms =  "/home/deck/Emulation/roms"
 target_cores = "/home/deck/.var/app/org.libretro.RetroArch/config/retroarch/cores"
 target_flavor = "linux"
 
+# Steam library integration: `retrosync.py sync steam` writes shortcuts,
+# collections (RetroSync / <System>) and grid artwork on the target.
+# Games launch through the EmuDeck launcher scripts.
+dest_steam_dir = "/home/deck/.steam/steam"
+# steam_user = "12345678"                    # needed when multiple accounts exist
+# steam_launchers_dir = "/home/deck/Emulation/tools/launchers"
+# steam_collection_prefix = "RetroSync"
+# steam_umbrella_collection = false          # true adds a flat "RetroSync" collection with all games
+# Per playlist: launch through a standalone emulator instead of RetroArch —
+# retroarch (default), dolphin, duckstation, flycast, pcsx2, ppsspp, mupen,
+# rpcs3, ryujinx, supermodel — or a full custom template:
+#   [[playlists]]
+#   steam_emulator = "dolphin"               # GameCube / Wii
+#   steam_launch_command = 'retroarch.sh -L {core} "{path}"'
+
 [ssh]
 hostname = "192.168.1.100"
 username = "deck"
